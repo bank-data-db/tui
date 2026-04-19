@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -70,6 +71,13 @@ func (m mainApp) View() (v tea.View) {
 	w, h := lipgloss.Width(s), lipgloss.Height(s)
 	if h > (m.height - HEADER_HEIGHT) || w > m.width {
 		v.Cursor = nil
+		if h > (m.height - HEADER_HEIGHT) {
+			log.Println("Height too big")
+		}
+		if w > m.width {
+			log.Println("Width too big")
+		}
+
 		v.SetContent(m.renderTooSmall())
 		return 
 	}
