@@ -87,8 +87,8 @@ func (m *Model[T, PT]) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 			m.resetEditor()
 			batcher = append(batcher, m.editor.Init())
 		}
-	} else if m.items[i].GetID() != m.curItem.GetID() {
-		m.curItem = m.items[i]
+	} else if m.items[i - 1].GetID() != m.curItem.GetID() {
+		m.curItem = m.items[i - 1]
 		m.resetEditor()
 		batcher = append(batcher, m.editor.Init())
 	}
@@ -97,14 +97,14 @@ func (m *Model[T, PT]) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 }
 
 func (m *Model[T, PT]) isNewCategory(gi int) bool {
-	return gi >= len(m.items)
+	return gi == 0
 }
 
 func (m *Model[T, PT]) categoryItems() []list.Item {
 	arr := make([]list.Item, len(m.items)+1)
-	arr[len(arr)-1] = m.newItem
+	arr[0] = m.newItem
 	for i, v := range m.items {
-		arr[i] = v
+		arr[i + 1] = v
 	}
 
 	return arr
