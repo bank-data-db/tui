@@ -27,6 +27,7 @@ func (m *Model[T, PT]) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 		m.curItem.SetID(string(msg))
 		m.items = append(m.items, m.curItem)
 		batcher = append(batcher, m.list.SetItems(m.categoryItems()))
+		m.list.GoToEnd()
 		batcher = append(batcher, func() tea.Msg {
 			return ItemNew{Value: m.curItem}
 		})
@@ -54,6 +55,15 @@ func (m *Model[T, PT]) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 
 		m.list.SetHeight(msg.H)
 		m.editor.SetWidth(msg.W - WIDTH_OFFSET_EDITOR)
+	case tea.MouseWheelMsg:
+		bubble = false
+
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			m.list.CursorUp()
+		case tea.MouseWheelDown:
+			m.list.CursorDown()
+		}
 	}
 
 	if !m.isLoaded {
@@ -67,8 +77,8 @@ func (m *Model[T, PT]) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 
 	if bubble {
 		forList := false
-		if msg, ok := msg.(tea.KeyPressMsg); ok {
-			forList = doesKeyMatchList(msg, m.list)
+		if km, ok := msg.(tea.KeyPressMsg); ok {
+			forList = doesKeyMatchList(km, m.list)
 		}
 
 		m.list, cmd = m.list.Update(msg)
@@ -87,8 +97,8 @@ func (m *Model[T, PT]) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 			m.resetEditor()
 			batcher = append(batcher, m.editor.Init())
 		}
-	} else if m.items[i - 1].GetID() != m.curItem.GetID() {
-		m.curItem = m.items[i - 1]
+	} else if m.items[i-1].GetID() != m.curItem.GetID() {
+		m.curItem = m.items[i-1]
 		m.resetEditor()
 		batcher = append(batcher, m.editor.Init())
 	}
@@ -104,7 +114,7 @@ func (m *Model[T, PT]) categoryItems() []list.Item {
 	arr := make([]list.Item, len(m.items)+1)
 	arr[0] = m.newItem
 	for i, v := range m.items {
-		arr[i + 1] = v
+		arr[i+1] = v
 	}
 
 	return arr

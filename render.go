@@ -57,6 +57,7 @@ func (m mainApp) View() (v tea.View) {
 	v.AltScreen = true
 	v.WindowTitle = "Bank Data"
 	v.Cursor = nil
+	v.MouseMode = tea.MouseModeCellMotion
 
 	if m.width == 0 || m.height == 0 {
 		return
@@ -69,7 +70,7 @@ func (m mainApp) View() (v tea.View) {
 	v.Cursor = c
 
 	w, h := lipgloss.Width(s), lipgloss.Height(s)
-	if h > (m.height - HEADER_HEIGHT) || w > m.width {
+	if h > (m.height-HEADER_HEIGHT) || w > m.width {
 		v.Cursor = nil
 		if h > (m.height - HEADER_HEIGHT) {
 			log.Println("Height too big")
@@ -79,12 +80,12 @@ func (m mainApp) View() (v tea.View) {
 		}
 
 		v.SetContent(m.renderTooSmall())
-		return 
+		return
 	}
 
 	if m.curFocusedScreen == S_LOGIN {
-		padTop := (m.height - h)/2
-		padLeft := (m.width - w)/2
+		padTop := (m.height - h) / 2
+		padLeft := (m.width - w) / 2
 
 		if c != nil {
 			c.Y += padTop
@@ -96,8 +97,8 @@ func (m mainApp) View() (v tea.View) {
 	}
 
 	header := m.renderHeader()
-	padTop := (m.height - h - HEADER_HEIGHT)/2
-	padLeft := (m.width - w)/2
+	padTop := (m.height - h - HEADER_HEIGHT) / 2
+	padLeft := (m.width - w) / 2
 
 	if c != nil {
 		c.Y += padTop + HEADER_HEIGHT
