@@ -13,90 +13,88 @@ import (
 	"github.com/shadiestgoat/colorutils"
 )
 
-//  1     60%     40%    10     8
-// ICON | NAME | DESC | DATE | AMT
-//
-
 const COL_SPLIT = "│"
 
 func (m *Model) cols() []int {
-	colCunt := 4
-
-	icon := 2
+	icon := 2 // the icon doesn't have a spacer around COLO_SPLIT
 	amt := 8
 	date := 10
 
-	// space padding on either side + content
-	colTotalWidth := lipgloss.Width(COL_SPLIT)*colCunt + colCunt*2
-	leftover := m.w - icon - amt - date - colTotalWidth
+	leftover := m.w - icon - amt - date - lipgloss.Width("  "+COL_SPLIT)*4
 
-	nameLen := int(float64(leftover) * 0.6)
+	catName := int(float64(leftover) * 0.3)
 
-	return []int{icon, nameLen, leftover - nameLen, date, amt}
+	return []int{date, amt, leftover - catName, catName, icon}
 }
 
 func (m Model) renderRow(t *api.Transaction, selected bool) string {
 	rowStyle := lipgloss.NewStyle()
 	if selected {
-		rowStyle = rowStyle.Background(styles.COLOR_MAIN)
+		rowStyle = rowStyle.Background(styles.COLOR_MAIN).Bold(true).Italic(true)
 	}
 
 	cols := m.cols()
 	str := make([]string, len(cols))
 	var cat *api.Category
+
 	if t.ResolvedCategoryID != nil {
 		i := slices.IndexFunc(m.cache.Categories, func(c *api.Category) bool {
 			return c.ID == *t.ResolvedCategoryID
 		})
 		if i != -1 {
 			cat = m.cache.Categories[i]
-			str[0] = m.cache.Categories[i].Icon
+			str[4] = m.cache.Categories[i].Icon
 		}
 	}
+	if cat != nil {
+		c, err := strconv.ParseInt(cat.Color, 16, 64)
+		if err != nil {
+			c = 0xffffff
+		}
 
-	str[2] = t.Desc
-	str[3] = t.AuthedAt.Format("02/01/2006")
+		lum := colorutils.RelativeLuminosity(uint8(c>>16), uint8((c>>8)&0xff), uint8(c&0xff))
+
+		fg := "#ffffff"
+		if colorutils.ContrastRatio(lum, colorutils.RelativeLuminosity(0, 0, 0)) > colorutils.ContrastRatio(lum, colorutils.RelativeLuminosity(0xff, 0xff, 0xff)) {
+			fg = "#000000"
+		}
+
+		if !selected {
+			rowStyle = lipgloss.NewStyle().Background(
+				lipgloss.Color("#" + cat.Color),
+			).Foreground(lipgloss.Color(
+				fg,
+			))
+		}
+
+		str[4] = rowStyle.Width(cols[4]).AlignHorizontal(lipgloss.Center).Render(str[4])
+		str[3] = cat.Name
+	}
+
+	str[0] = t.AuthedAt.Format("02/01/2006")
+	str[1] = lipgloss.NewStyle().Width(cols[1]).AlignHorizontal(lipgloss.Right).Render(
+		strconv.FormatFloat(t.Amount, 'f', 2, 64),
+	)
 
 	if t.ResolvedName != nil {
-		str[1] = *t.ResolvedName
-		str[2] = lipgloss.NewStyle().Faint(true).Render(str[2])
+		str[2] = *t.ResolvedName
+	} else {
+		str[2] = t.Desc
 	}
 
-	str[4] = strconv.FormatFloat(t.Amount, 'f', 2, 64)
-
 	for i, w := range cols {
-		base := rowStyle
-		if i == 0 {
-			base = lipgloss.NewStyle()
-		}
-
-		str[i] = base.Width(w).Render(
+		str[i] = rowStyle.Width(w).Render(
 			utils.Overflow(str[i], w),
 		)
 	}
 
-	if cat != nil {
-		c, err := strconv.Atoi(cat.Color)
-		if err == nil {
-			c = 0xffffff
-		}
-		_, _, l := colorutils.RGBToHSL(uint8(c >> 16), uint8((c >> 8) & 0xff), uint8(c & 0xff))
-		fg := lipgloss.Color("#000000")
-		if l > 0.4 {
-			fg = lipgloss.Color("#ffffff")
-		}
-
-		str[0] = lipgloss.NewStyle().Background(
-			lipgloss.Color("#" + cat.Color),
-		).Foreground(fg).Width(2).Render(str[0])
-	}
-
 	colSplitter := rowStyle.Render(" " + COL_SPLIT + " ")
 
-	// str[0] alr has a space in it
-	return str[0] + COL_SPLIT + rowStyle.Render(
-		" "+strings.Join(str[1:], colSplitter),
-	)
+	return strings.Join(str, colSplitter)
+}
+
+func (m Model) vpHeight() int {
+	return m.h - 2
 }
 
 func (m Model) View() (string, *tea.Cursor) {
@@ -104,20 +102,27 @@ func (m Model) View() (string, *tea.Cursor) {
 		return "", nil
 	}
 
+	headers := []string{"Date", "Amount", "Name", "Category"}
+	cols := m.cols()
+	for i, v := range headers {
+		headers[i] = lipgloss.NewStyle().Width(cols[i]).Render(utils.Overflow(v, cols[i]))
+	}
+
+	header := strings.Join(headers, " "+COL_SPLIT+" ")
+
 	items := m.items[m.viewportOff:]
-	// 1 line empty at the bottom
-	items = items[:min(len(items), m.h-1)]
+	items = items[:min(len(items), m.vpHeight())]
 
 	if len(items) == 0 {
 		return "No Items here!", nil
 	}
 
-	rows := ""
+	rows := header + "\n"
 	for i, v := range items {
 		rows += m.renderRow(v, m.selected == m.viewportOff+i) + "\n"
 	}
 
-	lastRowItems := []string{"Total Transactions: " + strconv.Itoa(len(m.items))}
+	lastRowItems := []string{"Total Transactions: " + strconv.Itoa(m.totalTransactions)}
 	if m.nextPageLoading {
 		loading := m.loader.View()
 		lastRowItems = append(
@@ -128,7 +133,7 @@ func (m Model) View() (string, *tea.Cursor) {
 
 	rows = rows[:len(rows)-1]
 
-	if m.hasHitLastPage && m.h-len(items) > 3 {
+	if m.hasHitLastPage && m.h-len(items) > 4 {
 		rows += "\n\n\n" + lipgloss.PlaceHorizontal(m.w, lipgloss.Center, "No More Transactions!")
 	}
 

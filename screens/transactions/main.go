@@ -56,10 +56,29 @@ func (m Model) Init() tea.Cmd {
 
 const DE_DUPE_BUFFER = 25
 
+func (m *Model) changeVP(goUp bool) {
+	if goUp {
+		if m.viewportOff <= 0 {
+			return
+		}
+		m.viewportOff--
+		m.forceSelIntoViewport()
+		return
+	}
+
+	m.viewportOff++
+	visibleItems := len(m.items) - m.viewportOff
+	if m.h-visibleItems > 8 {
+		m.viewportOff--
+	} else {
+		m.forceSelIntoViewport()
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch msg.String() {
+		switch k := msg.String(); k {
 		case "down":
 			if m.selected != len(m.items)-1 {
 				m.selected++
@@ -72,25 +91,11 @@ func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 			m.selected = len(m.items) - 1
 		case "start":
 			m.selected = 0
-		case "alt+down":
-			m.viewportOff = m.viewportOff + 1
-			visibleItems := len(m.items) - m.viewportOff
-			if m.h-visibleItems > 8 {
-				m.viewportOff--
-			}
-			// if len(m.items) - m.viewportOff < 7 {
-			// 	m.viewportOff--
-			// }
-		case "alt+up":
-			m.viewportOff = m.viewportOff - 1
-			if m.viewportOff < 0 {
-				m.viewportOff = 0
-			}
+		case "alt+down", "alt+up":
+			m.changeVP(k == "alt+up")
 		}
 
-		if msg.Mod.Contains(tea.ModAlt) {
-			m.forceSelIntoViewport()
-		} else {
+		if !msg.Mod.Contains(tea.ModAlt) {
 			m.forceViewportIntoSel()
 		}
 	case newPageData:
@@ -122,6 +127,13 @@ func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 	case utils.ResizeMessage:
 		m.w, m.h = msg.W, msg.H
 		m.forceViewportIntoSel()
+	case tea.MouseWheelMsg:
+		switch msg.Button {
+		case tea.MouseWheelDown:
+			m.changeVP(false)
+		case tea.MouseWheelUp:
+			m.changeVP(true)
+		}
 	}
 
 	batch := []tea.Cmd{}
@@ -146,8 +158,8 @@ func (m *Model) forceViewportIntoSel() {
 
 	if m.selected < m.viewportOff {
 		m.viewportOff = m.selected
-	} else if m.selected > m.viewportOff+m.h-2 {
-		m.viewportOff = m.selected - m.h + 2
+	} else if m.selected > m.viewportOff+m.vpHeight()-1 {
+		m.viewportOff = m.selected - (m.vpHeight() - 1)
 	}
 }
 
@@ -157,10 +169,12 @@ func (m *Model) forceSelIntoViewport() {
 		return
 	}
 
+	log.Println("sel", m.selected, "vpheight", m.vpHeight(), "off", m.viewportOff, "lastItem", m.viewportOff+m.vpHeight())
+
 	if m.selected < m.viewportOff {
 		m.selected = m.viewportOff
-	} else if m.selected > m.viewportOff+m.h-2 {
-		m.selected = m.viewportOff + m.h - 2
+	} else if m.selected > m.viewportOff+m.vpHeight()-1 {
+		m.selected = m.viewportOff + m.vpHeight() - 1
 	}
 }
 
@@ -172,7 +186,7 @@ func (m Model) indexIsVisible(n int) bool {
 		n += len(m.items)
 	}
 
-	return m.viewportOff <= n && n <= m.viewportOff+m.h
+	return m.viewportOff <= n && n <= m.viewportOff+m.vpHeight()
 }
 
 const REQ_DEDUPE_PERIOD = 1 * time.Minute
