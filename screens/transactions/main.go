@@ -15,16 +15,17 @@ import (
 )
 
 type Model struct {
-	w, h            int
-	selected        int
-	viewportOff     int
-	items           []*api.Transaction
-	hasHitLastPage  bool
-	lastDataPage    int
-	api             *api.APIClient
-	cache           *repo.Cache
-	loader          spinner.Model
-	nextPageLoading bool
+	w, h              int
+	selected          int
+	viewportOff       int
+	items             []*api.Transaction
+	hasHitLastPage    bool
+	lastDataPage      int
+	api               *api.APIClient
+	cache             *repo.Cache
+	loader            spinner.Model
+	nextPageLoading   bool
+	totalTransactions int
 }
 
 func New(api *api.APIClient, cache *repo.Cache, w, h int) *Model {
@@ -117,6 +118,7 @@ func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 
 		m.nextPageLoading = false
 		m.lastDataPage = msg.page
+		m.totalTransactions = msg.Total
 	case utils.ResizeMessage:
 		m.w, m.h = msg.W, msg.H
 		m.forceViewportIntoSel()
