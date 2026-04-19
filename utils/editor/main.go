@@ -92,6 +92,7 @@ func New(
 			Focused: textinput.StyleState{
 				Text:        lipgloss.Style{},
 				Placeholder: styles.S_TEXT_DISABLED,
+				Suggestion:  styles.S_TEXT_DISABLED,
 			},
 			Blurred: textinput.StyleState{
 				Text:        styles.S_TEXT_DISABLED,
@@ -266,11 +267,18 @@ func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 	}
 
 	if passToChildren {
+		updated := false
 		for i, f := range c.inpFields {
+			cur := c.inpFields[i].Value()
 			c.inpFields[i], cmd = f.Update(msg)
+			if cur != c.inpFields[i].Value() {
+				updated = true
+			}
+
 			batcher = append(batcher, cmd)
 		}
-		if _, ok := msg.(tea.KeyPressMsg); ok {
+
+		if updated {
 			for i, f := range c.inpFields {
 				// re-validate cause some validators need to be triggered external events
 				if errors.Is(f.Err, APIErr("")) {
