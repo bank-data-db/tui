@@ -69,7 +69,7 @@ func (c *mappingImpl) NewEditor(w, h int, v *mappingProxy) *editor.Model {
 						return ""
 					}
 
-					return strconv.FormatFloat(*v.InpAmt, 'e', 2, 64)
+					return strconv.FormatFloat(*v.InpAmt, 'f', 2, 64)
 				},
 				SetValue: func(raw string) {
 					if raw == "" {
