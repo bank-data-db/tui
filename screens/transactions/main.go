@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bank_data_tui/api"
@@ -13,6 +14,14 @@ import (
 	"github.com/bank_data_tui/utils"
 	"github.com/bank_data_tui/utils/repo"
 )
+
+type editRow struct {
+	name    *textinput.Model
+	cat     *textinput.Model
+	oldName string
+	// Old cat id
+	oldCat *string
+}
 
 type Model struct {
 	w, h              int
@@ -26,6 +35,7 @@ type Model struct {
 	loader            spinner.Model
 	nextPageLoading   bool
 	totalTransactions int
+	editRow           *editRow
 }
 
 func New(api *api.APIClient, cache *repo.Cache, w, h int) *Model {
@@ -75,28 +85,86 @@ func (m *Model) changeVP(goUp bool) {
 	}
 }
 
+func (m *Model) handleKeyNormal(msg tea.KeyPressMsg) {
+	switch k := msg.String(); k {
+	case "down":
+		if m.selected != len(m.items)-1 {
+			m.selected++
+		}
+	case "up":
+		if m.selected != 0 {
+			m.selected--
+		}
+	case "end":
+		m.selected = len(m.items) - 1
+	case "start":
+		m.selected = 0
+	case "alt+down", "alt+up":
+		m.changeVP(k == "alt+up")
+	}
+
+	if !msg.Mod.Contains(tea.ModAlt) {
+		m.forceViewportIntoSel()
+	}
+}
+
+func (m *Model) handleKeyEditMode(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	ti := m.editRow.name
+	if m.editRow.cat.Focused() {
+		ti = m.editRow.cat
+	}
+
+	switch k := msg.String(); k {
+	case "escape":
+		cur := ti.Value()
+		old := m.editRow.oldName
+		if m.editRow.cat.Focused() {
+			old = ""
+			if m.editRow.oldCat != nil {
+				c, err := m.cache.EasyCatByID(m.api, *m.editRow.oldCat)
+				if err != nil {
+					log.Panicln(err)
+				} else if c == nil {
+					log.Panicln("Somehow got a nil category, despite it existing before??")
+				}
+				old = c.Name
+			}
+		}
+
+		if cur == old {
+			m.editRow = nil
+			return true, nil
+		}
+		ti.SetValue(old)
+		ti.CursorEnd()
+		return true, nil
+	case "alt+esc":
+		m.editRow = nil
+		return true, nil
+	case "enter":
+		if m.editRow.cat.Err == nil {
+			return true, func() tea.Msg {
+				m.api.TransactionsFetch()
+			}
+		}
+	case "tab":
+		ti.Blur()
+
+		if m.editRow.name == ti {
+			return true, m.editRow.cat.Focus()
+		} else {
+			return true, m.editRow.name.Focus()
+		}
+	}
+
+	return false, nil
+}
+
 func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch k := msg.String(); k {
-		case "down":
-			if m.selected != len(m.items)-1 {
-				m.selected++
-			}
-		case "up":
-			if m.selected != 0 {
-				m.selected--
-			}
-		case "end":
-			m.selected = len(m.items) - 1
-		case "start":
-			m.selected = 0
-		case "alt+down", "alt+up":
-			m.changeVP(k == "alt+up")
-		}
-
-		if !msg.Mod.Contains(tea.ModAlt) {
-			m.forceViewportIntoSel()
+		if m.editRow == nil {
+			m.handleKeyNormal(msg)
 		}
 	case newPageData:
 		if msg.override {
@@ -128,11 +196,13 @@ func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 		m.w, m.h = msg.W, msg.H
 		m.forceViewportIntoSel()
 	case tea.MouseWheelMsg:
-		switch msg.Button {
-		case tea.MouseWheelDown:
-			m.changeVP(false)
-		case tea.MouseWheelUp:
-			m.changeVP(true)
+		if m.editRow == nil {
+			switch msg.Button {
+			case tea.MouseWheelDown:
+				m.changeVP(false)
+			case tea.MouseWheelUp:
+				m.changeVP(true)
+			}
 		}
 	}
 
