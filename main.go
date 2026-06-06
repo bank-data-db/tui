@@ -7,35 +7,30 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bank_data_tui/api"
+
 	"github.com/bank_data_tui/screens/login"
 	"github.com/bank_data_tui/utils"
 	"github.com/bank_data_tui/utils/repo"
+	"github.com/bank_data_tui/utils/toast"
 	"github.com/joho/godotenv"
 )
 
-type Screen int
-
-const (
-	S_LOGIN Screen = iota
-	S_TRANS
-	S_MAPPINGS
-	S_CATEGORIES
-	S_UPLOAD
-)
-
 type mainApp struct {
-	curFocusedScreen Screen
+	curFocusedScreen utils.ScreenID
 	screenImp        utils.Screen
 
 	width  int
 	height int
 
 	cache *repo.Cache
-	api   *api.APIClient
+	api   *api.Client
+
+	toasts []*toast.ToastMsg
 }
 
 func (m mainApp) Init() tea.Cmd {
-	return m.screenImp.Init()
+	cmd := m.screenImp.Init()
+	return cmd
 }
 
 func main() {
@@ -47,23 +42,42 @@ func main() {
 	defer f.Close()
 	godotenv.Load()
 
+	apiURL := os.Getenv("API_URL")
+	if apiURL == "" {
+		panic("no API url :( (set API_URL env)")
+	}
+
+	api, err := api.NewClient(apiURL)
+	if err != nil {
+		panic("Is the server down? Err: " + err.Error())
+	}
+
 	app := &mainApp{
-		curFocusedScreen: S_LOGIN,
-		screenImp:        login.NewScreenLogin(),
-		api:              &api.APIClient{},
-		cache:            &repo.Cache{},
+		curFocusedScreen: utils.S_LOGIN,
+		screenImp:        login.NewScreenLogin(api),
+		api:              api,
+		cache:            repo.NewCache(),
 	}
 	user, pass := os.Getenv("USERNAME"), os.Getenv("PASSWORD")
 
 	if user != "" && pass != "" {
-		err := app.api.Login([2]string{user, pass})
+		err := app.api.Login(user, pass)
 		if err != nil {
 			panic(err)
 		}
-		app.switchToScreen(S_TRANS)
+		// Slower startup times bc this init will run in the global init
+		app.switchToScreen(utils.S_TRANS)
 	}
 
 	p := tea.NewProgram(app)
+
+	go func() {
+		for {
+			msg := <-utils.GlobalMessage
+			p.Send(msg)
+		}
+	}()
+
 	if _, err := p.Run(); err != nil {
 		fmt.Println(err)
 	}

@@ -2,393 +2,342 @@ package editor
 
 import (
 	"errors"
-	"fmt"
-	"slices"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/bank_data_tui/api"
-	"github.com/bank_data_tui/styles"
 	"github.com/bank_data_tui/utils"
+	"google.golang.org/protobuf/protoadapt"
 )
 
-type DataField struct {
-	Title string
-	ID    string
+type ErrRequired struct {
+	msg string
+}
 
-	Row int
-	Col int
+func (e ErrRequired) Error() string {
+	return e.msg
+}
 
-	Value    *string
-	GetValue func() string
-	SetValue func(v string)
+type Message interface {
+	protoadapt.MessageV2
+	GetID() string
+	SetID(string)
+}
 
-	Flex    bool
-	StyleCB func(v string, err error, selected bool, cur lipgloss.Style) lipgloss.Style
+type layoutData struct {
+	x int
+	// Field ID mapping:
+	// >= 0  -> input data
+	// < 0   -> buttons
+	fieldID  int
+	canFocus bool
+	grow     bool
+}
+
+type EditorMod func(m *Model)
+
+func WithRequireAtLeastOneOf(msg string, fields ...string) EditorMod {
+	return func(m *Model) {
+		for _, fID := range fields {
+			f := m.fieldByID[fID]
+			if f == nil {
+				panic("RequireAtLeastOneOf: unknown field: " + fID)
+			}
+		}
+		errReq := ErrRequired{msg}
+
+		m.editorValidations = append(m.editorValidations, func(m *Model) {
+			has := false
+			for _, fID := range fields {
+				if m.fieldByID[fID].Value() != "" {
+					has = true
+					break
+				}
+			}
+
+			if has {
+				var cmpErr = ErrRequired{}
+				for _, fID := range fields {
+					f := m.fieldByID[fID]
+					if errors.As(f.GetErr(), &cmpErr) && cmpErr == errReq {
+						f.SetErr(nil)
+					}
+				}
+			} else {
+				for _, fID := range fields {
+					m.fieldByID[fID].SetErr(errReq)
+				}
+			}
+		})
+	}
+}
+
+func WithRequireGroup(msg string, fields ...string) EditorMod {
+	return func(m *Model) {
+		for _, fID := range fields {
+			f := m.fieldByID[fID]
+			if f == nil {
+				panic("RequireGroup: unknown field: " + fID)
+			}
+		}
+
+		errReq := ErrRequired{msg}
+
+		m.editorValidations = append(m.editorValidations, func(m *Model) {
+			hasOne := false
+			hasAll := true
+			for _, fID := range fields {
+				if m.fieldByID[fID].Value() == "" {
+					hasAll = false
+				} else {
+					hasOne = true
+				}
+			}
+
+			if hasOne == hasAll {
+				var cmpErr = ErrRequired{}
+				for _, fID := range fields {
+					f := m.fieldByID[fID]
+					if errors.As(f.GetErr(), &cmpErr) && cmpErr == errReq {
+						f.SetErr(nil)
+					}
+				}
+			} else {
+				for _, fID := range fields {
+					m.fieldByID[fID].SetErr(errReq)
+				}
+			}
+
+		})
+	}
+}
+
+func WithAltCreate(msg string, create func() (string, error)) EditorMod {
+	return func(m *Model) {
+		m.create.altText = msg
+		m.create.alt = func() error {
+			id, err := create()
+			m.item.SetID(id)
+			return err
+		}
+	}
+}
+
+func WithAltDelete(msg string, del func() error) EditorMod {
+	return func(m *Model) {
+		m.del.altText = msg
+		m.del.alt = del
+	}
+}
+
+type action struct {
+	altText string
+	regular func() error
+	alt     func() error
+}
+
+func (a action) getF(alt bool) func() error {
+	if alt {
+		return a.alt
+	}
+	return a.regular
+}
+
+type confirmModal struct {
+	text  string
+	atYes bool
+	cmd   func(m *Model) tea.Cmd
 }
 
 type Model struct {
-	width int
+	width  int
+	height int
 
-	ItemID string
+	confirmDial *confirmModal
+
+	item Message
 
 	focusedField int
-	dataFields   []*DataField
-	inpFields    []textinput.Model
-	layout       [][]int
+	fields       []field
 
-	popupVisible bool
-	popupOnNo    bool
+	layout     [][]*layoutData
+	fieldByID  map[string]inputField
+	rowHeights []int
 
-	create func(alt bool) (string, error)
-	update func(alt bool, id string) error
-	del    func(alt bool, id string) error
+	buttonPad int
+
+	create *action
+	update *action
+	del    *action
+
+	editorValidations []func(m *Model)
 }
 
 func New(
-	w int, id string,
-	dataFields []*DataField,
-	createFunc func(alt bool) (string, error),
-	updateFunc func(alt bool, id string) error,
-	delFunc func(alt bool, id string) error,
-	mods ...FieldsMod,
-) *Model {
-	inpFields := make([]textinput.Model, len(dataFields))
-
-	highestRow := 0
-	for _, d := range dataFields {
-		if d.Row < 0 || d.Col < 0 {
-			panic("Row or col can't be <= 0!")
-		}
-		if d.Value == nil && (d.GetValue == nil || d.SetValue == nil) {
-			panic("Data Field must have at least 1 field get/set method")
-		}
-
-		if d.Row > highestRow {
-			highestRow = d.Row
-		}
-	}
-
-	highestCol := make([]int, highestRow+1)
-	for _, d := range dataFields {
-		if d.Col > highestCol[d.Row] {
-			highestCol[d.Row] = d.Col
-		}
-	}
-
-	layout := make([][]int, highestRow+1)
-	for i, v := range highestCol {
-		layout[i] = make([]int, v+1)
-	}
-
-	for i, d := range dataFields {
-		f := textinput.New()
-		f.Prompt = ""
-		f.Blur()
-		f.SetWidth(15)
-		f.SetVirtualCursor(false)
-		f.SetStyles(textinput.Styles{
-			Focused: textinput.StyleState{
-				Text:        lipgloss.Style{},
-				Placeholder: styles.S_TEXT_DISABLED,
-				Suggestion:  styles.S_TEXT_DISABLED,
+	w int, h int, v Message,
+	createFunc func() (string, error),
+	updateFunc func() error,
+	delFunc func() error,
+	layout Layout,
+	mods ...EditorMod,
+) Model {
+	m := Model{
+		width:     w,
+		height:    h,
+		item:      v,
+		fields:    []field{},
+		fieldByID: map[string]inputField{},
+		layout:    [][]*layoutData{},
+		create: &action{
+			regular: func() error {
+				id, err := createFunc()
+				v.SetID(id)
+				return err
 			},
-			Blurred: textinput.StyleState{
-				Text:        styles.S_TEXT_DISABLED,
-				Placeholder: styles.S_TEXT_DISABLED,
-			},
-			Cursor: styles.TI_CURSOR,
-		})
-		f.Placeholder = d.Title
-		f.KeyMap.NextSuggestion.SetKeys("ctrl+n")
-		f.KeyMap.PrevSuggestion.SetKeys("ctrl+p")
-
-		inpFields[i] = f
-
-		if layout[d.Row][d.Col] != 0 {
-			panic(fmt.Sprintf("Overlap at y=%v, x=%v", d.Row, d.Col))
-		}
-
-		// + 1 so that unset detection is simpler :3
-		layout[d.Row][d.Col] = i + 1
+		},
+		update: &action{regular: updateFunc},
+		del:    &action{regular: delFunc},
 	}
 
-	for y, r := range layout {
-		if len(r) == 0 {
-			panic(fmt.Sprintf("Empty row at y=%v", y))
-		}
-		for x, v := range r {
-			if v == 0 {
-				panic(fmt.Sprintf("Value not set at y=%v, x=%v", y, x))
+	size := [2]int{w, h}
+	pr := v.ProtoReflect()
+	for i, row := range layout {
+		ld := []*layoutData{}
+		// +1 for padding
+		m.rowHeights = append(m.rowHeights, row.Height()+1)
+
+		j := 0
+		for tpl := range row.Items() {
+			f, size := tpl.gen(pr, rowCtx{
+				pos:  [2]int{i, j},
+				size: size,
+				row:  row,
+			})
+			inpF, ok := f.(inputField)
+			ld = append(ld, &layoutData{
+				fieldID:  len(m.fields),
+				canFocus: ok,
+				grow:     size == -1,
+			})
+			if ok {
+				inpF.SetFromMsg(pr)
+				m.fieldByID[inpF.ID()] = inpF
 			}
-			r[x]--
+			valF, ok := f.(validatableField)
+			if ok {
+				valF.ForceValidate()
+			}
+
+			m.fields = append(m.fields, f)
+			j++
 		}
+
+		m.layout = append(m.layout, ld)
 	}
 
-	ptr := make([]*textinput.Model, len(inpFields))
-	for i := range inpFields {
-		ptr[i] = &inpFields[i]
+	for _, v := range mods {
+		v(&m)
 	}
 
-	for _, m := range mods {
-		m(ptr)
+	for _, v := range m.editorValidations {
+		v(&m)
 	}
 
-	for i, f := range dataFields {
-		if f.Value == nil {
-			inpFields[i].SetValue(f.GetValue())
-		} else {
-			inpFields[i].SetValue(*f.Value)
-		}
+	m.focusFirstField()
+	if w != 0 {
+		m.ResetLayout()
 	}
-
-	for i, f := range inpFields {
-		if f.Validate != nil {
-			inpFields[i].Err = f.Validate(f.Value())
-		}
-	}
-
-	m := &Model{
-		width:      w,
-		ItemID:     id,
-		dataFields: dataFields,
-		inpFields:  inpFields,
-		create:     createFunc,
-		update:     updateFunc,
-		layout:     layout,
-		del:        delFunc,
-	}
-
-	m.SetWidth(w)
-	m.resetButtonLayout()
 
 	return m
 }
 
-func (c *Model) Init() tea.Cmd {
-	cmd := c.inpFields[0].Focus()
+func (m *Model) ResetLayout() {
+	hasButtons := len(m.layout) != 0 && m.layout[len(m.layout)-1][0].fieldID < 0
 
-	return cmd
-}
-
-type ItemNew string
-type ItemUpdate string
-type ItemDel string
-
-func (c *Model) save(alt bool) (tea.Msg, error) {
-	if c.ItemID == "" {
-		id, err := c.create(alt)
-		if err != nil {
-			return nil, err
-		}
-
-		c.ItemID = id
-		c.resetButtonLayout()
-		return ItemNew(id), nil
+	resize := m.layout
+	if hasButtons {
+		resize = resize[:len(resize)-1]
 	}
 
-	err := c.update(alt, c.ItemID)
-	if err != nil {
-		return nil, err
-	}
-	return ItemUpdate(c.ItemID), nil
-}
+	usedHeight := 0
 
-func (c *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
-	var cmd tea.Cmd
-	batcher := make([]tea.Cmd, 0, len(c.inpFields)+1)
-
-	passToChildren := true
-
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		if c.popupVisible {
-			passToChildren = false
-		}
-
-		switch msg.String() {
-		case "tab", "right", "down", "left", "shift+tab", "up":
-			passToChildren = false
-
-			if c.popupVisible {
-				c.popupOnNo = !c.popupOnNo
-				break
-			}
-
-			handled, nf := c.handleNavKey(msg.String())
-			if !handled {
-				passToChildren = true
+	for i, row := range resize {
+		sizeLeft := m.width
+		growers := 0
+		for _, v := range row {
+			if v.grow {
+				growers++
 			} else {
-				batcher = append(batcher, c.focusField(nf))
+				sizeLeft -= m.fieldWidth(v.fieldID)
 			}
-		case "enter", "alt":
-			passToChildren = false
-			switch c.focusedField {
-			case BTN_SAVE:
-				// save
-				batcher = append(batcher, c.handleSaveEnter(msg.Mod.Contains(tea.ModAlt)))
-			case BTN_DEL:
-				// delete
-				err := c.del(msg.Mod.Contains(tea.ModAlt), c.ItemID)
-				if err != nil {
-					// TODO: Better error handling lmao
-					panic("Can't delete: " + err.Error())
-				}
-				batcher = append(batcher, func() tea.Msg { return ItemDel(c.ItemID) })
-			case BTN_RESET:
-				// reset
-				c.focusField(c.layout[0][0])
-				for i, d := range c.dataFields {
-					if d.Value == nil {
-						c.inpFields[i].SetValue(d.GetValue())
-					} else {
-						c.inpFields[i].SetValue(*d.Value)
+		}
+
+		if growers == 1 && len(row) == 1 {
+			f := m.fields[row[0].fieldID]
+			f.SetWidth(m.width)
+			row[0].x = 0
+			m.notifyBounds(f, 0, usedHeight)
+		} else if growers != 0 {
+			perItemW := sizeLeft / growers
+			extraEvery := (sizeLeft % growers) + 1
+
+			curX := 0
+			gi := 0
+			for _, c := range row {
+				c.x = curX
+				f := m.fields[c.fieldID]
+				m.notifyBounds(f, curX, usedHeight)
+				if c.grow {
+					w := perItemW
+					if extraEvery != 1 && ((gi+1)%extraEvery) == 0 {
+						w++
 					}
+					gi++
+					f.SetWidth(w)
 				}
-			default:
-				_, nf := c.handleNavKey("enter")
 
-				batcher = append(batcher, c.focusField(nf))
+				curX += m.fieldWidth(c.fieldID)
+			}
+		} else if sizeLeft != 0 {
+			sizes := []int{}
+			for _, v := range row {
+				sizes = append(sizes, m.fieldWidth(v.fieldID))
+			}
+
+			j := 0
+			for off := range utils.EqualSpreadSeq(m.width, sizes) {
+				f := m.fields[row[j].fieldID]
+				f.SetWidth(sizes[j])
+				row[j].x = off
+				m.notifyBounds(f, off, usedHeight)
+				j++
 			}
 		}
-	case validationErrMsg:
-		for _, v := range msg {
-			i := slices.IndexFunc(c.dataFields, func(f *DataField) bool { return f.ID == v[0] })
-			if i == -1 {
-				continue
-			}
 
-			if len(c.layout[c.dataFields[i].Row]) != 1 {
-				c.inpFields[i].SetValue("")
-			}
-			c.inpFields[i].Err = APIErr(v[1])
+		usedHeight += m.rowHeights[i]
+	}
+
+	saved := m.item.GetID() != ""
+	padding := 0
+	for p := 2; p >= 0; p-- {
+		if btnSizing(saved, p) <= m.width {
+			padding = p
+			break
 		}
 	}
 
-	if passToChildren {
-		updated := false
-		for i, f := range c.inpFields {
-			cur := c.inpFields[i].Value()
-			c.inpFields[i], cmd = f.Update(msg)
-			if cur != c.inpFields[i].Value() {
-				updated = true
-			}
-
-			batcher = append(batcher, cmd)
-		}
-
-		if updated {
-			for i, f := range c.inpFields {
-				// re-validate cause some validators need to be triggered external events
-				if errors.Is(f.Err, APIErr("")) {
-					continue
-				}
-				if f.Validate != nil {
-					c.inpFields[i].Err = f.Validate(f.Value())
-				}
-			}
-		}
-	}
-
-	return c, tea.Batch(batcher...)
+	m.resetButtonLayout(m.width, saved, padding)
 }
 
-func (c *Model) SetWidth(w int) {
-	c.width = w
-
-	for _, row := range c.layout {
-		if row[0] < 0 {
-			continue
-		}
-
-		// -len(row) + 1 = space between each item
-		// -len(row) = each item has an extra space aside from width
-		// fuck you textinput component >:(
-		availWidth := w - len(row) + 1 - len(row)
-		flexers := 0
-
-		for _, i := range row {
-			f := c.dataFields[i]
-			availWidth -= extraFieldLength(&c.inpFields[i], f)
-
-			if f.Flex {
-				flexers++
-			} else {
-				availWidth -= c.inpFields[i].Width()
-			}
-		}
-
-		if flexers == 0 {
-			continue
-		}
-
-		extraSpaceEvery := availWidth % flexers
-		spaceBuf := 0
-
-		for _, i := range row {
-			if !c.dataFields[i].Flex {
-				continue
-			}
-			c.inpFields[i].SetWidth(availWidth / flexers)
-			if extraSpaceEvery != 0 && spaceBuf == extraSpaceEvery {
-				c.inpFields[i].SetWidth(availWidth/flexers + 1)
-				spaceBuf = 0
-			} else {
-				spaceBuf++
-			}
-		}
+func (m Model) notifyBounds(f field, curX, usedHeight int) {
+	b, ok := f.(interestedInBounds)
+	if ok {
+		b.SetBounds(curX, m.height-usedHeight)
 	}
 }
 
-type validationErrMsg [][2]string
-
-func (c *Model) handleSaveEnter(alt bool) tea.Cmd {
-	if utils.Any(slices.Values(c.inpFields), func(v textinput.Model) bool { return v.Err != nil }) {
-		return nil
-	}
-
-	for i, f := range c.inpFields {
-		d := c.dataFields[i]
-		if d.Value == nil {
-			d.SetValue(f.Value())
-		} else {
-			*d.Value = f.Value()
-		}
-	}
-
-	return func() tea.Msg {
-		msg, err := c.save(alt)
-		if err == nil {
-			return msg
-		}
-
-		if e, ok := err.(*api.ValidationErr); !ok {
-			panic(err)
-		} else {
-			return validationErrMsg(e.Details)
-		}
-	}
+func (m Model) FieldByLayout(row, col int) field {
+	return m.fields[m.layout[row][col].fieldID]
 }
 
-const (
-	BTN_SAVE  = -1
-	BTN_DEL   = -2
-	BTN_RESET = -3
-)
-
-func (c *Model) resetButtonLayout() {
-	y := len(c.layout) - 1
-	var l []int
-	if c.ItemID == "" {
-		l = []int{BTN_SAVE, BTN_RESET}
-	} else {
-		l = []int{BTN_SAVE, BTN_DEL, BTN_RESET}
-	}
-
-	if c.layout[y][0] < 0 {
-		c.layout[y] = l
-	} else {
-		c.layout = append(c.layout, l)
-	}
+func (m Model) FieldByID(id string) inputField {
+	return m.fieldByID[id]
 }

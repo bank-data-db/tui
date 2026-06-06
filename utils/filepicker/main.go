@@ -2,7 +2,6 @@
 package filepicker
 
 import (
-	"log"
 	"os"
 	"path"
 	"slices"
@@ -14,14 +13,15 @@ import (
 )
 
 type Model struct {
-	files     []os.DirEntry
-	dirs      []os.DirEntry
-	fileIndex int
-	sugIndex  int
-	inpIsFile bool
-	err       error
-	textField textinput.Model
-	home      string
+	files        []os.DirEntry
+	dirs         []os.DirEntry
+	fileIndex    int
+	sugIndex     int
+	inpIsFile    bool
+	err          error
+	focusedField int
+	textField    textinput.Model
+	home         string
 	// Accepted clean path, not ending in a / unless its == /
 	acceptedPath   string
 	w, h           int
@@ -175,8 +175,6 @@ func (m *Model) adjustVP() {
 
 	highestRow := m.vpOffset + pickerHeight - 1
 
-	log.Println("ADJUST PRE", m.vpOffset, fileRow, highestRow)
-
 	if m.vpOffset > fileRow {
 		m.vpOffset = fileRow
 	} else if m.vpOffset < 0 {
@@ -186,9 +184,6 @@ func (m *Model) adjustVP() {
 	} else if highestRow > fCount+dirCount {
 		m.vpOffset = fCount + dirCount - pickerHeight + 1
 	}
-
-	log.Println("ADJUST POST", m.vpOffset)
-
 }
 
 func cycle(cur int, len int, inc bool) int {
@@ -207,16 +202,40 @@ func cycle(cur int, len int, inc bool) int {
 	}
 }
 
-func (m *Model) toggleInput() tea.Cmd {
+func (m *Model) ToggleInput() tea.Cmd {
+	switch m.focusedField {
+	case 0:
+		return m.FocusFileArea()
+	case 1:
+		return m.FocusText()
+	}
+
+	return nil
+}
+
+func (m *Model) Blur() {
+	m.textField.Blur()
+	m.focusedField = -1
+}
+
+func (m *Model) FocusText() tea.Cmd {
+	if m.textField.Focused() {
+		return nil
+	}
+	m.focusedField = 0
+	return m.textField.Focus()
+}
+
+func (m *Model) FocusFileArea() tea.Cmd {
+	m.focusedField = 1
 	if m.textField.Focused() {
 		m.textField.Blur()
 		return nil
 	}
-	return m.textField.Focus()
+	return nil
 }
 
 func (m *Model) forceUserSel(dir string) tea.Cmd {
-	log.Println("MEOW", dir, path.Clean(dir))
 	dir = path.Clean(dir)
 	p := m.presentablePath(dir)
 	if !strings.HasSuffix(p, "/") {
@@ -271,12 +290,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if ok {
 			return m, cmd
 		}
-		if m.textField.Focused() {
+		switch m.focusedField {
+		case 0:
 			cmd, ok := m.handleKeyTextinput(msg)
 			if ok {
 				return m, cmd
 			}
-		} else {
+		case 1:
 			cmd, ok := m.handleKeyPicker(msg)
 			if ok {
 				return m, cmd
@@ -346,7 +366,7 @@ func (m Model) Init() tea.Cmd {
 		}
 
 		return readDir(dir, true)
-	}, textinput.Blink)
+	})
 }
 
 func New(w, h int, extensions []string) Model {
@@ -361,13 +381,13 @@ func New(w, h int, extensions []string) Model {
 		},
 		Cursor: styles.TI_CURSOR,
 	})
-	ti.Focus()
 
 	m := Model{
 		sugIndex:       -1,
 		textField:      ti,
 		home:           home,
 		highlightedExt: extensions,
+		focusedField:   -1,
 	}
 	m.SetSize(w, h)
 

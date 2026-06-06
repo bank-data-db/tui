@@ -1,90 +1,94 @@
 package categories
 
 import (
-	"fmt"
+	"context"
 	"strconv"
 
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
+	"github.com/bank-data-db/proto/bank_svc_pb"
+	"github.com/bank-data-db/proto/categories_pb"
 	"github.com/bank_data_tui/api"
 	"github.com/bank_data_tui/utils/editor"
-	"github.com/bank_data_tui/utils/listeditor"
+	"github.com/bank_data_tui/utils/toast"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
 )
 
-type categoryProxy api.Category
-
-func (c categoryProxy) FilterValue() string {
-	return c.Icon + " " + c.Name
-}
-func (c categoryProxy) GetID() string {
-	return c.ID
-}
-func (c *categoryProxy) SetID(id string) {
-	c.ID = id
-}
-
-func verifyColor(s string) error {
+func verifyColor(s string) *string {
 	if len(s) != 6 {
-		return fmt.Errorf("Needs a hex color (no #)")
+		return new("Needs a hex color (no #)")
 	}
 	if _, err := strconv.ParseUint(s, 16, 64); err != nil {
-		return fmt.Errorf("Not a valid color")
+		return new("Not a valid color")
 	}
 
 	return nil
 }
 
-func (c *categoryImpl) NewEditor(w, h int, v *categoryProxy) *editor.Model {
+func create(c *api.Client, v *categories_pb.Category) func() (string, error) {
+	return func() (string, error) {
+		reqNew := &categories_pb.ReqNew{}
+		api.CopyTo(reqNew.ProtoReflect(), v.ProtoReflect(), false)
+		resp, err := c.CategoriesNew(context.Background(), reqNew)
+		if err != nil {
+			return "", err
+		}
+
+		toast.Success("Category Created")
+
+		return resp.GetID(), nil
+	}
+}
+
+func update(c *api.Client, v *categories_pb.Category) func() error {
+	return func() error {
+		// I know its a patch style impl, but we can also impl it as a POST >:3
+		_, err := c.CategoriesUpdate(context.Background(), v)
+
+		toast.Success("Category Updated")
+
+		return err
+	}
+}
+
+func delete(c *api.Client, v *categories_pb.Category) func() error {
+	return func() error {
+		_, err := c.CategoriesDelete(context.Background(), bank_svc_pb.ReqDelete_builder{Id: new(v.GetID())}.Build())
+
+		if err == nil {
+			toast.Success("Category Deleted!")
+		}
+
+		return err
+	}
+}
+
+func (c *categoryImpl) NewEditor(w, h int, v *categories_pb.Category) editor.Model {
 	return editor.New(
-		w-listeditor.WIDTH_OFFSET_EDITOR,
-		v.ID,
-		[]*editor.DataField{
-			{
-				Title: "Name",
-				ID:    "name",
-				Value: &v.Name,
-				Row:   0,
-			},
-			{
-				Title: "Color",
-				ID:    "color",
-				Value: &v.Color,
-				Row:   1,
-				StyleCB: func(v string, err error, selected bool, cur lipgloss.Style) lipgloss.Style {
-					if !selected || err != nil {
+		w, h, v,
+		create(c.api, v),
+		update(c.api, v),
+		delete(c.api, v),
+		editor.Layout{
+			editor.RowTextInput("Name", "name", true),
+			editor.RowTextInput(
+				"Color", "color", true,
+				editor.WithTextValidation(verifyColor),
+				editor.WithStyleCB(func(m *textinput.Model, cur lipgloss.Style) lipgloss.Style {
+					if verifyColor(m.Value()) != nil {
 						return cur
 					}
+					return cur.Border(lipgloss.BlockBorder()).BorderForeground(lipgloss.Color("#" + m.Value()))
+				}),
+			),
+			editor.RowTextInput("Icon", "icon", true, editor.WithTextValidation(func(s string) *string {
+				if uniseg.GraphemeClusterCount(ansi.Strip(s)) != 1 || lipgloss.Width(s) != 1 {
+					return new("Must be 1 character")
+				}
 
-					return cur.BorderForeground(lipgloss.Color("#" + v)).BorderStyle(lipgloss.ASCIIBorder())
-				},
-			},
-			{
-				Title: "Icon",
-				ID:    "icon",
-				Value: &v.Icon,
-				Row:   2,
-			},
+				return nil
+			})),
 		},
-		func(_ bool) (string, error) {
-			id, err := c.api.CategoriesCreate(&v.SavableCategory)
-			if err != nil {
-				return "", err
-			}
-			return id, nil
-		},
-		func(_ bool, id string) error { return c.api.CategoriesUpdate(id, &v.SavableCategory) },
-		func(_ bool, id string) error { return c.api.CategoriesDelete(id) },
-		editor.RequireFields(0, 1, 2),
-		editor.AddFieldValidator(1, func(s string) error {
-			return verifyColor(s)
-		}),
-		editor.AddFieldValidator(2, func(s string) error {
-			if uniseg.GraphemeClusterCount(ansi.Strip(s)) != 1 || lipgloss.Width(s) != 1 {
-				return fmt.Errorf("Need icon that is 1 in width")
-			}
-
-			return nil
-		}),
 	)
 }

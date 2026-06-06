@@ -70,7 +70,7 @@ func (m Model) viewFiles(resp *strings.Builder, dirs []os.DirEntry) {
 	styleAllowed := lipgloss.NewStyle().Foreground(styles.COLOR_SECONDARY)
 	styleDis := lipgloss.NewStyle().Faint(true).Foreground(styles.COLOR_DISABLED)
 
-	focused := !m.textField.Focused()
+	focused := m.focusedField == 1
 
 	maxExtSize := 0
 	maxFileSize := 0

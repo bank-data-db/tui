@@ -4,64 +4,65 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/bank-data-db/proto/categories_pb"
 	"github.com/bank_data_tui/api"
+	"github.com/bank_data_tui/utils"
 	"github.com/bank_data_tui/utils/editor"
 	"github.com/bank_data_tui/utils/listeditor"
 	"github.com/bank_data_tui/utils/repo"
 )
 
-type categoryImpl struct {
-	api *api.APIClient
+var _ listeditor.Delegate[*categories_pb.Category] = &categoryImpl{}
 
+type categoryImpl struct {
+	api *api.Client
 	cache *repo.Cache
 }
 
-func (m *categoryImpl) InitialFetch() ([]*categoryProxy, error) {
-	c, err := m.cache.EasyCategories(m.api)
-	if err != nil {
-		return nil, err
-	}
-
-	arr := make([]*categoryProxy, len(c))
-	for i, v := range c {
-		arr[i] = (*categoryProxy)(v)
-	}
-
-	return arr, nil
+func (m *categoryImpl) InitialFetch() ([]*categories_pb.Category, error) {
+	return m.cache.Categories.MaybeLoad(m.api)
 }
 
-func (m *categoryImpl) Update(msg tea.Msg) {
+func (m *categoryImpl) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
-	case editor.ItemDel:
-		i := slices.IndexFunc(m.cache.Categories, func(c *api.Category) bool {
-			return c.ID == string(msg)
-		})
-		if i != -1 {
-			m.cache.Categories = slices.Delete(m.cache.Categories, i, i+1)
-		}
+	case editor.MsgItemDel:
+		m.cache.Categories.DeleteByID(string(msg))
 	case listeditor.ItemNew:
-		m.cache.Categories = append(m.cache.Categories, (*api.Category)(msg.Value.(*categoryProxy)))
+		m.cache.Categories.Data = append(m.cache.Categories.Data, msg.Value.(*categories_pb.Category))
 	case listeditor.ItemUpdate:
-		cat := (*api.Category)(msg.Value.(*categoryProxy))
-		i := slices.IndexFunc(m.cache.Categories, func(c *api.Category) bool {
-			return c.ID == string(cat.ID)
+		cat := msg.Value.(*categories_pb.Category)
+		i := slices.IndexFunc(m.cache.Categories.Data, func(c *categories_pb.Category) bool {
+			return c.GetID() == cat.GetID()
 		})
 		if i == -1 {
-			m.cache.Categories = append(m.cache.Categories, cat)
+			m.cache.Categories.Data = append(m.cache.Categories.Data, cat)
 		} else {
-			m.cache.Categories[i] = cat
+			m.cache.Categories.Data[i] = cat
 		}
 	}
+
+	return nil
 }
 
-func New(c *api.APIClient, cache *repo.Cache, w, h int) *listeditor.Model[categoryProxy, *categoryProxy] {
-	m := listeditor.New[categoryProxy](
-		"New Category", categoryDelegate{}, w, h,
-	)
-	m.Abstraction = &categoryImpl{
-		api:   c,
-		cache: cache,
-	}
+func (m *categoryImpl) NewItem() *categories_pb.Category {
+	return &categories_pb.Category{}
+}
 
-	return m
+func (m *categoryImpl) RenderItem(s lipgloss.Style, sel bool, cat *categories_pb.Category) string {
+	return " " + utils.RenderCategory(s, listeditor.WIDTH_LIST-1, !sel, cat)
+}
+
+func (m categoryImpl) FilterValue(cat *categories_pb.Category) string {
+	return cat.GetIcon() + " " + cat.GetName()
+}
+
+func New(c *api.Client, cache *repo.Cache, w, h int) *listeditor.Model[*categories_pb.Category] {
+	return listeditor.New(
+		w, h, "New Category",
+		&categoryImpl{
+			api:   c,
+			cache: cache,
+		},
+	)
 }

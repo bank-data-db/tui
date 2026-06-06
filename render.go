@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bank_data_tui/styles"
+	"github.com/bank_data_tui/utils"
 )
 
 var (
@@ -21,13 +22,14 @@ const (
 )
 
 var HEADER_SCREENS = []struct {
-	s Screen
+	s utils.ScreenID
 	t string
 }{
-	{S_TRANS, "Transactions"},
-	{S_MAPPINGS, "Mappings"},
-	{S_CATEGORIES, "Categories"},
-	{S_UPLOAD, "Upload"},
+	{utils.S_TRANS, "Transactions"},
+	{utils.S_MAPPINGS, "Mappings"},
+	{utils.S_CATEGORIES, "Categories"},
+	{utils.S_CARDS, "Cards"},
+	{utils.S_UPLOAD, "Upload"},
 }
 
 func (m mainApp) renderHeader() string {
@@ -56,7 +58,6 @@ func (m mainApp) renderTooSmall() string {
 func (m mainApp) View() (v tea.View) {
 	v.AltScreen = true
 	v.WindowTitle = "Bank Data"
-	v.Cursor = nil
 	v.MouseMode = tea.MouseModeCellMotion
 
 	if m.width == 0 || m.height == 0 {
@@ -73,17 +74,17 @@ func (m mainApp) View() (v tea.View) {
 	if h > (m.height-HEADER_HEIGHT) || w > m.width {
 		v.Cursor = nil
 		if h > (m.height - HEADER_HEIGHT) {
-			log.Println("Height too big")
+			log.Println("Height too big", m.height-HEADER_HEIGHT, h)
 		}
 		if w > m.width {
-			log.Println("Width too big")
+			log.Println("Width too big", m.width, w)
 		}
 
 		v.SetContent(m.renderTooSmall())
 		return
 	}
 
-	if m.curFocusedScreen == S_LOGIN {
+	if m.curFocusedScreen == utils.S_LOGIN {
 		padTop := (m.height - h) / 2
 		padLeft := (m.width - w) / 2
 
@@ -105,7 +106,17 @@ func (m mainApp) View() (v tea.View) {
 		c.X += padLeft
 	}
 
-	v.SetContent(header + "\n" + lipgloss.NewStyle().Padding(padTop, 0, 0, padLeft).Render(s))
+	content := lipgloss.NewLayer(header + "\n" + lipgloss.NewStyle().Padding(padTop, 0, 0, padLeft).Render(s))
+	toastData := ""
+	toastWidth := int(float64(m.width) * 0.2)
+	for _, v := range m.toasts[:min(len(m.toasts), 2)] {
+		toastData += v.View(toastWidth) + "\n"
+	}
+	toasts := lipgloss.NewLayer(strings.TrimRight(toastData, "\n"))
+	toasts.Z(20)
+	toasts.X(m.width - toastWidth)
+
+	v.SetContent(lipgloss.NewCompositor(content, toasts).Render())
 
 	return v
 }

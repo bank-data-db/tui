@@ -1,6 +1,6 @@
 module github.com/bank_data_tui
 
-go 1.25.0
+go 1.26.3
 
 require (
 	charm.land/bubbles/v2 v2.1.0
@@ -14,8 +14,17 @@ require (
 )
 
 require (
+	golang.org/x/exp v0.0.0-20260529124908-c761662dc8c9 // indirect
+	golang.org/x/net v0.51.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
+	google.golang.org/grpc v1.81.1 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
+)
+
+require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/bank-data-db/proto v0.0.0-20260603224708-c2e8df03fa3b
 	github.com/charmbracelet/bubbletea v1.3.10 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/lipgloss v1.1.0 // indirect

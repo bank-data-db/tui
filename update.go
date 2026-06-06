@@ -2,35 +2,45 @@ package main
 
 import (
 	"log"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/bank_data_tui/screens/cards"
 	"github.com/bank_data_tui/screens/categories"
 	"github.com/bank_data_tui/screens/login"
 	"github.com/bank_data_tui/screens/mappings"
 	"github.com/bank_data_tui/screens/transactions"
 	"github.com/bank_data_tui/screens/upload"
 	"github.com/bank_data_tui/utils"
+	"github.com/bank_data_tui/utils/toast"
 )
 
-func (m *mainApp) switchToScreen(s Screen) tea.Cmd {
+func (m *mainApp) switchToScreen(s utils.ScreenID) tea.Cmd {
 	if m.curFocusedScreen == s {
 		return nil
 	}
 
 	m.curFocusedScreen = s
 	switch s {
-	case S_TRANS:
+	case utils.S_LOGIN:
+		m.screenImp = login.NewScreenLogin(m.api)
+	case utils.S_TRANS:
 		m.screenImp = transactions.New(m.api, m.cache, m.width, m.height-HEADER_HEIGHT)
-	case S_MAPPINGS:
+	case utils.S_MAPPINGS:
 		m.screenImp = mappings.New(m.api, m.cache, m.width, m.height-HEADER_HEIGHT)
-	case S_CATEGORIES:
+	case utils.S_CATEGORIES:
 		m.screenImp = categories.New(m.api, m.cache, m.width, m.height-HEADER_HEIGHT)
-	case S_UPLOAD:
-		m.screenImp = upload.New(m.api, m.width, m.height-HEADER_HEIGHT)
+	case utils.S_CARDS:
+		m.screenImp = cards.New(m.api, m.cache, m.width, m.height-HEADER_HEIGHT)
+	case utils.S_UPLOAD:
+		m.screenImp = upload.New(m.api, m.cache, m.width, m.height-HEADER_HEIGHT)
 	}
 
 	return m.screenImp.Init()
 }
+
+type clearToastMsg struct{}
 
 func (m *mainApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -45,24 +55,26 @@ func (m *mainApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "alt+tab":
 			s := m.curFocusedScreen + 1
-			if s > S_UPLOAD {
-				s = S_TRANS
+			if s > utils.S_UPLOAD {
+				s = utils.S_TRANS
 			}
 			batcher = append(batcher, m.switchToScreen(s))
 		case "alt+shift+tab":
 			s := m.curFocusedScreen - 1
-			if s == S_LOGIN {
-				s = S_UPLOAD
+			if s == utils.S_LOGIN {
+				s = utils.S_UPLOAD
 			}
 			batcher = append(batcher, m.switchToScreen(s))
 		case "alt+t":
-			batcher = append(batcher, m.switchToScreen(S_TRANS))
+			batcher = append(batcher, m.switchToScreen(utils.S_TRANS))
 		case "alt+m":
-			batcher = append(batcher, m.switchToScreen(S_MAPPINGS))
+			batcher = append(batcher, m.switchToScreen(utils.S_MAPPINGS))
 		case "alt+c":
-			batcher = append(batcher, m.switchToScreen(S_CATEGORIES))
+			batcher = append(batcher, m.switchToScreen(utils.S_CATEGORIES))
+		case "alt+a":
+			batcher = append(batcher, m.switchToScreen(utils.S_CARDS))
 		case "alt+u", "alt+n":
-			batcher = append(batcher, m.switchToScreen(S_UPLOAD))
+			batcher = append(batcher, m.switchToScreen(utils.S_UPLOAD))
 		default:
 			passToChildren = true
 		}
@@ -76,20 +88,20 @@ func (m *mainApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			H: m.height - HEADER_HEIGHT,
 		})
 		batcher = append(batcher, cmd)
-	case login.LoginEntered:
-		screen, ok := m.screenImp.(*login.Model)
-		if !ok {
-			panic("Somehow on the wrong model?")
-		}
+	case utils.MsgSwitchScreens:
+		batcher = append(batcher, m.switchToScreen(utils.ScreenID(msg)))
+	case toast.ToastMsg:
+		batcher = append(batcher, func() tea.Msg {
+			<-time.After(time.Second * 2)
 
-		err := m.api.Login(msg)
-		if err != nil {
-			batcher = append(batcher, screen.WrongPassword())
-		} else {
-			batcher = append(batcher, m.switchToScreen(S_TRANS))
+			return clearToastMsg{}
+		})
+		m.toasts = append(m.toasts, &msg)
+	case clearToastMsg:
+		if len(m.toasts) != 0 {
+			// sanity check tbh
+			m.toasts = m.toasts[1:]
 		}
-	case utils.MsgGoToHome:
-		batcher = append(batcher, m.switchToScreen(S_TRANS))
 	default:
 		passToChildren = true
 	}

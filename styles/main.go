@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
@@ -20,12 +21,14 @@ var (
 	S_TEXT_NORMAL              = lipgloss.NewStyle().Foreground(lipgloss.NoColor{})
 	S_TEXT_HIGHLIGHT           = lipgloss.NewStyle().Foreground(COLOR_MAIN)
 	S_TEXT_HIGHLIGHT_SECONDARY = lipgloss.NewStyle().Foreground(COLOR_SECONDARY)
+	S_TEXT_ERR                 = lipgloss.NewStyle().Faint(true).Foreground(COLOR_WRONG)
 )
 
 var (
 	TI_CURSOR = textinput.CursorStyle{
 		Color: COLOR_SECONDARY,
 		Blink: true,
+		Shape: tea.CursorBlock,
 	}
 )
 

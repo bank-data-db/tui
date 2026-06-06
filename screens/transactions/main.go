@@ -1,36 +1,27 @@
 package transactions
 
 import (
+	"context"
 	"log"
-	"slices"
-	"time"
 
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/bank-data-db/proto/transactions_pb"
 	"github.com/bank_data_tui/api"
 	"github.com/bank_data_tui/styles"
 	"github.com/bank_data_tui/utils"
+	"github.com/bank_data_tui/utils/dropdown"
 	"github.com/bank_data_tui/utils/repo"
 )
-
-type editRow struct {
-	name    *textinput.Model
-	cat     *textinput.Model
-	oldName string
-	// Old cat id
-	oldCat *string
-}
 
 type Model struct {
 	w, h              int
 	selected          int
 	viewportOff       int
-	items             []*api.Transaction
-	hasHitLastPage    bool
-	lastDataPage      int
-	api               *api.APIClient
+	items             []*transactions_pb.Transaction
+	paginationToken   *string
+	api               *api.Client
 	cache             *repo.Cache
 	loader            spinner.Model
 	nextPageLoading   bool
@@ -38,7 +29,7 @@ type Model struct {
 	editRow           *editRow
 }
 
-func New(api *api.APIClient, cache *repo.Cache, w, h int) *Model {
+func New(api *api.Client, cache *repo.Cache, w, h int) *Model {
 	return &Model{
 		w:     w,
 		h:     h,
@@ -48,16 +39,21 @@ func New(api *api.APIClient, cache *repo.Cache, w, h int) *Model {
 }
 
 type newPageData struct {
-	*api.RespPages[[]*api.Transaction]
-	page     int
-	override bool
+	res *transactions_pb.RespList
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.forceRequestPage(1), func() tea.Msg {
-		_, err := m.cache.EasyCategories(m.api)
+	return tea.Batch(m.reqNextPage(), func() tea.Msg {
+		_, err := m.cache.Categories.MaybeLoad(m.api)
 		if err != nil {
-			panic(err)
+			log.Panicln(err)
+		}
+
+		return nil
+	}, func() tea.Msg {
+		_, err := m.cache.Cards.MaybeLoad(m.api)
+		if err != nil {
+			log.Panicln(err)
 		}
 
 		return nil
@@ -67,6 +63,8 @@ func (m Model) Init() tea.Cmd {
 const DE_DUPE_BUFFER = 25
 
 func (m *Model) changeVP(goUp bool) {
+	defer m.updateDropdownHeight()
+
 	if goUp {
 		if m.viewportOff <= 0 {
 			return
@@ -85,7 +83,9 @@ func (m *Model) changeVP(goUp bool) {
 	}
 }
 
-func (m *Model) handleKeyNormal(msg tea.KeyPressMsg) {
+func (m *Model) handleKeyNormal(msg tea.KeyPressMsg) tea.Cmd {
+	var cmd tea.Cmd
+
 	switch k := msg.String(); k {
 	case "down":
 		if m.selected != len(m.items)-1 {
@@ -101,99 +101,48 @@ func (m *Model) handleKeyNormal(msg tea.KeyPressMsg) {
 		m.selected = 0
 	case "alt+down", "alt+up":
 		m.changeVP(k == "alt+up")
+	case "e":
+		cmd = m.newEditRow()
 	}
 
 	if !msg.Mod.Contains(tea.ModAlt) {
 		m.forceViewportIntoSel()
 	}
-}
 
-func (m *Model) handleKeyEditMode(msg tea.KeyPressMsg) (bool, tea.Cmd) {
-	ti := m.editRow.name
-	if m.editRow.cat.Focused() {
-		ti = m.editRow.cat
-	}
-
-	switch k := msg.String(); k {
-	case "escape":
-		cur := ti.Value()
-		old := m.editRow.oldName
-		if m.editRow.cat.Focused() {
-			old = ""
-			if m.editRow.oldCat != nil {
-				c, err := m.cache.EasyCatByID(m.api, *m.editRow.oldCat)
-				if err != nil {
-					log.Panicln(err)
-				} else if c == nil {
-					log.Panicln("Somehow got a nil category, despite it existing before??")
-				}
-				old = c.Name
-			}
-		}
-
-		if cur == old {
-			m.editRow = nil
-			return true, nil
-		}
-		ti.SetValue(old)
-		ti.CursorEnd()
-		return true, nil
-	case "alt+esc":
-		m.editRow = nil
-		return true, nil
-	case "enter":
-		if m.editRow.cat.Err == nil {
-			return true, func() tea.Msg {
-				m.api.TransactionsFetch()
-			}
-		}
-	case "tab":
-		ti.Blur()
-
-		if m.editRow.name == ti {
-			return true, m.editRow.cat.Focus()
-		} else {
-			return true, m.editRow.name.Focus()
-		}
-	}
-
-	return false, nil
+	return cmd
 }
 
 func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
+	var cmd tea.Cmd
+	batch := []tea.Cmd{}
+
+	passToChildren := true
+
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if m.editRow == nil {
-			m.handleKeyNormal(msg)
+			cmd := m.handleKeyNormal(msg)
+			batch = append(batch, cmd)
+			passToChildren = false
+		} else {
+			handled, cmd := m.handleKeyEditMode(msg)
+			batch = append(batch, cmd)
+			if handled {
+				passToChildren = false
+			}
 		}
 	case newPageData:
-		if msg.override {
-			m.items = msg.Data
+		if !msg.res.HasPaginationToken() {
+			m.paginationToken = nil
 		} else {
-			if m.lastDataPage+1 != msg.page {
-				break
-			}
-			sl := slices.DeleteFunc(msg.Data, func(vb *api.Transaction) bool {
-				for _, va := range m.items[max(len(m.items)-DE_DUPE_BUFFER, 0):] {
-					if va.ID == vb.ID {
-						return true
-					}
-				}
-				return false
-			})
-
-			m.items = append(m.items, sl...)
+			m.paginationToken = new(msg.res.GetPaginationToken())
 		}
-
-		if len(msg.Data) != 50 {
-			m.hasHitLastPage = true
-		}
-
 		m.nextPageLoading = false
-		m.lastDataPage = msg.page
-		m.totalTransactions = msg.Total
+		m.totalTransactions = int(msg.res.GetTotalCount())
+		m.items = append(m.items, msg.res.GetResult()...)
 	case utils.ResizeMessage:
 		m.w, m.h = msg.W, msg.H
+		m.resizeEditRow()
 		m.forceViewportIntoSel()
 	case tea.MouseWheelMsg:
 		if m.editRow == nil {
@@ -204,17 +153,45 @@ func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 				m.changeVP(true)
 			}
 		}
+	case dropdown.SelectMsg:
+		if m.editRow != nil {
+			batch = append(batch, m.editRow.toggleFocus())
+		}
+	case transUpdated:
+		t := m.items[m.selected]
+		if v := m.editRow.name.Value(); v == "" {
+			t.ClearResolvedName()
+		} else {
+			t.SetResolvedName(v)
+		}
+		if v := m.editRow.cat.Value(); v == "" {
+			t.ClearResolvedCategoryId()
+		} else {
+			t.SetResolvedCategoryID(m.editRow.cat.Value())
+		}
+
+		m.editRow = nil
 	}
 
-	batch := []tea.Cmd{}
-	var cmd tea.Cmd
 	if m.nextPageLoading {
 		m.loader, cmd = m.loader.Update(msg)
 		batch = append(batch, cmd)
 	}
 
-	if !m.hasHitLastPage && !m.nextPageLoading && m.indexIsVisible(-LOAD_OFFSET) {
-		batch = append(batch, m.reqPage(m.lastDataPage+1))
+	if m.paginationToken != nil && !m.nextPageLoading && m.indexIsVisible(-LOAD_OFFSET) {
+		batch = append(batch, m.reqNextPage())
+	}
+
+	if passToChildren && m.editRow != nil {
+		if m.editRow.cat.Focused() {
+			cat, cmd := m.editRow.cat.Update(msg)
+			batch = append(batch, cmd)
+			m.editRow.cat = cat
+		} else {
+			name, cmd := m.editRow.name.Update(msg)
+			batch = append(batch, cmd)
+			m.editRow.name = name
+		}
 	}
 
 	return m, tea.Batch(batch...)
@@ -239,8 +216,6 @@ func (m *Model) forceSelIntoViewport() {
 		return
 	}
 
-	log.Println("sel", m.selected, "vpheight", m.vpHeight(), "off", m.viewportOff, "lastItem", m.viewportOff+m.vpHeight())
-
 	if m.selected < m.viewportOff {
 		m.selected = m.viewportOff
 	} else if m.selected > m.viewportOff+m.vpHeight()-1 {
@@ -259,18 +234,7 @@ func (m Model) indexIsVisible(n int) bool {
 	return m.viewportOff <= n && n <= m.viewportOff+m.vpHeight()
 }
 
-const REQ_DEDUPE_PERIOD = 1 * time.Minute
-
-func (m *Model) reqPage(n int) tea.Cmd {
-	if m.nextPageLoading {
-		return nil
-	}
-
-	return m.forceRequestPage(n)
-}
-
-func (m *Model) forceRequestPage(n int) tea.Cmd {
-	log.Println("Loading")
+func (m *Model) reqNextPage() tea.Cmd {
 	m.nextPageLoading = true
 	m.loader = spinner.New(
 		spinner.WithSpinner(spinner.Dot),
@@ -279,14 +243,18 @@ func (m *Model) forceRequestPage(n int) tea.Cmd {
 
 	return tea.Batch(
 		func() tea.Msg {
-			d, err := m.api.TransactionsFetch(api.TOR_AUTH, n, false)
+			d, err := m.api.TransactionsList(context.Background(), transactions_pb.ReqList_builder{
+				PaginationToken: m.paginationToken,
+				OrderBy:         transactions_pb.OrderFieldAuthedAt.Enum(),
+				Descending:      new(true),
+				PageSize:        new(uint32(100)),
+			}.Build())
 			if err != nil {
 				log.Panicln(err)
 			}
 
 			return newPageData{
-				RespPages: d,
-				page:      n,
+				res: d,
 			}
 		},
 		m.loader.Tick,

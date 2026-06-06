@@ -1,11 +1,14 @@
 package listeditor
 
 import (
+	"log"
+	"strings"
+
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bank_data_tui/utils/editor"
-	"charm.land/bubbles/v2/list"
-	"charm.land/bubbles/v2/spinner"
 )
 
 const (
@@ -14,93 +17,88 @@ const (
 	WIDTH_OFFSET_EDITOR      = WIDTH_LIST + 1 + WIDTH_EDITOR_SPLIT_SPACE + WIDTH_EDITOR_SPLIT_SPACE // border + margin + padding
 )
 
-var (
-	STYLE_SPLIT = lipgloss.NewStyle().MarginLeft(2).PaddingLeft(2).BorderLeft(true).BorderStyle(lipgloss.DoubleBorder())
-)
-
-type Abstraction[T any] interface {
-	NewEditor(w, h int, curItem T) *editor.Model
+type Delegate[T any] interface {
+	NewEditor(w, h int, v T) editor.Model
+	RenderItem(baseStyle lipgloss.Style, selected bool, item T) string
+	NewItem() T
 	InitialFetch() ([]T, error)
+	FilterValue(T) string
 }
 
 type Item interface {
 	GetID() string
 	SetID(v string)
-	FilterValue() string
 }
 
-type Model[item any, PT interface {
-	Item
-	*item
-}] struct {
-	Abstraction[PT]
+type Model[T Item] struct {
+	del Delegate[T]
 
 	list     list.Model
 	spin     spinner.Model
 	isLoaded bool
-	newItem  NewItem
+	newItem  CreateNewItemKey
 
-	items   []PT
-	curItem PT
+	items   []T
+	curItem T
 
-	editor *editor.Model
+	editor editor.Model
 
 	w, h int
 }
 
-type NewItem string
-
-func (ni NewItem) FilterValue() string { return string(ni) }
-
-func New[T any, PT interface {
-	Item
-	*T
-}](newItemText string, delegate list.ItemDelegate, w, h int) *Model[T, PT] {
-	m := &Model[T, PT]{
+func New[T Item](
+	w, h int,
+	newItemText string,
+	del Delegate[T],
+) *Model[T] {
+	m := &Model[T]{
+		del:      del,
 		spin:     spinner.Model{},
 		isLoaded: false,
-		newItem:  NewItem(newItemText),
-		items:    []PT{},
-		curItem:  new(T),
-		editor:   &editor.Model{},
+		newItem:  CreateNewItemKey(newItemText),
+		curItem:  del.NewItem(),
+		items:    []T{},
+		editor:   editor.Model{},
 		w:        w,
 		h:        h,
 	}
 
-	m.list = list.New([]list.Item{m.newItem}, delegate, WIDTH_LIST, h)
+	m.list = list.New([]list.Item{m.newItem}, itemDel[T](m.del.RenderItem), WIDTH_LIST, h)
 	m.list.KeyMap = listKeyMap
 	m.list.SetShowTitle(false)
 	m.list.SetShowHelp(false)
+	m.list.SetShowStatusBar(false)
+	m.list.FilterInput.SetVirtualCursor(false)
+	m.list.FilterInput.Prompt = "Filter: "
 
 	return m
 }
 
 type initialResp[T any] []T
 
-func (m *Model[T, PT]) Init() tea.Cmd {
+func (m *Model[T]) Init() tea.Cmd {
 	m.resetEditor()
 
 	batcher := []tea.Cmd{
 		func() tea.Msg {
-			res, err := m.InitialFetch()
+			res, err := m.del.InitialFetch()
 			if err != nil {
-				panic("Can't do initial fetch: " + err.Error())
+				log.Panicln("Can't do initial fetch:", err)
 			}
 
-			return initialResp[PT](res)
+			return initialResp[T](res)
 		},
 		m.spin.Tick,
-		m.editor.Init(),
 	}
 
-	if a, ok := m.Abstraction.(interface{ Init() tea.Cmd }); ok {
+	if a, ok := m.del.(interface{ Init() tea.Cmd }); ok {
 		batcher = append(batcher, a.Init())
 	}
 
 	return tea.Batch(batcher...)
 }
 
-func (m Model[T, PT]) View() (string, *tea.Cursor) {
+func (m Model[T]) View() (string, *tea.Cursor) {
 	if !m.isLoaded {
 		return m.spin.View(), nil
 	}
@@ -111,11 +109,20 @@ func (m Model[T, PT]) View() (string, *tea.Cursor) {
 		cur.X += WIDTH_OFFSET_EDITOR
 	}
 
-	res := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		lipgloss.NewStyle().Width(WIDTH_LIST).AlignHorizontal(lipgloss.Left).Render(l),
-		STYLE_SPLIT.Height(m.h).Render(e),
-	)
+	if m.list.FilterState() == list.Filtering {
+		cur = m.list.FilterInput.Cursor()
+		cur.X += 2
+	}
 
-	return res, cur
+	listL := lipgloss.NewLayer(l)
+	editL := lipgloss.NewLayer(e)
+	editL.X(WIDTH_OFFSET_EDITOR)
+	splitBar := lipgloss.NewLayer(
+		strings.Repeat("║\n", m.h),
+	)
+	splitBar.X(WIDTH_LIST + 1 + WIDTH_EDITOR_SPLIT_SPACE)
+
+	return lipgloss.NewCanvas(m.w, m.h).Compose(
+		lipgloss.NewCompositor(listL, editL, splitBar),
+	).Render(), cur
 }

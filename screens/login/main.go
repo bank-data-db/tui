@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/bank_data_tui/api"
 	"github.com/bank_data_tui/styles"
 	"github.com/bank_data_tui/utils"
 )
@@ -26,11 +27,13 @@ type Model struct {
 	// 2 = wrong
 	state int
 
+	api *api.Client
+
 	inpName textinput.Model
 	inpPass textinput.Model
 }
 
-func NewScreenLogin() *Model {
+func NewScreenLogin(api *api.Client) *Model {
 	inpName := textinput.New()
 	inpPass := textinput.New()
 
@@ -78,6 +81,7 @@ func NewScreenLogin() *Model {
 		focusedField: 0,
 		inpName:      inpName,
 		inpPass:      inpPass,
+		api:          api,
 	}
 }
 
@@ -165,10 +169,10 @@ func (s *Model) changeField(newField int) tea.Cmd {
 func (s *Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 	batcher := []tea.Cmd{}
 
-	switch m := msg.(type) {
+	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if s.state != 1 {
-			switch m.String() {
+			switch msg.String() {
 			case "tab", "down":
 				batcher = append(batcher, s.changeField(s.focusedField+1))
 			case "shift+tab", "up":
@@ -178,7 +182,12 @@ func (s *Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 					s.state = 1
 
 					return s, func() tea.Msg {
-						return LoginEntered([2]string{s.inpName.Value(), s.inpPass.Value()})
+						err := s.api.Login(s.inpName.Value(), s.inpPass.Value())
+						if err != nil {
+							return msgWrongPass{}
+						} else {
+							return utils.MsgSwitchScreens(utils.S_TRANS)
+						}
 					}
 				} else {
 					batcher = append(batcher, s.changeField(s.focusedField+1))
@@ -187,6 +196,15 @@ func (s *Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 		}
 	case clearWrongPass:
 		s.state = 0
+	case msgWrongPass:
+		s.state = 2
+		s.inpName.SetValue("")
+		s.inpPass.SetValue("")
+		s.changeField(0)
+		batcher = append(batcher, func() tea.Msg {
+			<-time.NewTimer(750 * time.Millisecond).C
+			return clearWrongPass(true)
+		})
 	}
 
 	var tmpCmd tea.Cmd
@@ -201,15 +219,4 @@ func (s *Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 }
 
 type clearWrongPass bool
-
-func (s *Model) WrongPassword() tea.Cmd {
-	s.state = 2
-	s.inpName.SetValue("")
-	s.inpPass.SetValue("")
-	s.changeField(0)
-
-	return func() tea.Msg {
-		<-time.NewTimer(750 * time.Millisecond).C
-		return clearWrongPass(true)
-	}
-}
+type msgWrongPass struct{}

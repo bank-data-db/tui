@@ -1,222 +1,129 @@
 package editor
 
 import (
-	"errors"
-	"strings"
+	"log"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bank_data_tui/styles"
 	"github.com/bank_data_tui/utils"
+	"github.com/charmbracelet/x/ansi"
 )
 
-func (c Model) View() (string, *tea.Cursor) {
-	if c.width == 0 {
+func (m Model) valid() bool {
+	for _, f := range m.fields {
+		f, ok := f.(inputField)
+		if ok {
+			if f.GetErr() != nil {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (m Model) renderButton(text string, selected bool, evil bool, disabled bool) string {
+	s := styles.STYLE_FIELD.Padding(1, m.buttonPad)
+
+	if !selected {
+	} else if disabled {
+		s = s.Background(styles.COLOR_DISABLED)
+	} else if evil {
+		s = s.Background(styles.COLOR_WRONG)
+	} else {
+		s = s.Background(styles.COLOR_MAIN)
+	}
+
+	if selected {
+		if disabled {
+			s = s.BorderForeground(styles.COLOR_MAIN)
+		} else {
+			s = s.BorderForeground(styles.COLOR_SECONDARY)
+		}
+	} else if disabled {
+		s = s.BorderForeground(styles.COLOR_DISABLED)
+	}
+
+	return s.Render(text)
+}
+
+func (m Model) buttonLayer(y int) *lipgloss.Layer {
+	parentLayer := lipgloss.NewLayer("")
+
+	parentLayer.Y(y)
+
+	for _, v := range m.layout[len(m.layout)-1] {
+		saveBtn := v.fieldID == BTN_SAVE_ID
+
+		l := lipgloss.NewLayer(m.renderButton(
+			m.btnText(v.fieldID),
+			m.focusedField == v.fieldID,
+			!saveBtn,
+			saveBtn && !m.valid(),
+		))
+		l.X(v.x)
+		parentLayer.AddLayers(l)
+	}
+
+	return parentLayer
+}
+
+func (m Model) View() (string, *tea.Cursor) {
+	if m.width == 0 {
 		return "", nil
 	}
 
-	sections := []string{}
-	valid := true
-
+	compose := lipgloss.NewCompositor()
 	var cur *tea.Cursor
-	if !c.inButtons(c.focusedField) {
-		cur = c.inpFields[c.focusedField].Cursor()
-		cur.X += 2
-		cur.Y += c.dataFields[c.focusedField].Row * 4 + 1
-	}
 
-	// last row has special render handling
-	for _, row := range c.layout[:len(c.layout)-1] {
-		if len(row) == 1 {
-			i := row[0]
-			txt := &c.inpFields[i]
-			res, off := renderRowField(c.width, txt, c.dataFields[i], c.focusedField == i)
-			sections = append(sections, res)
-			if txt.Err != nil {
-				valid = false
-			}
-			if c.focusedField == i {
-				cur.X += off
-			}
-		} else {
-			parts := make([]string, 0, len(row))
-			cursorPart := -1
-			for ri, i := range row {
-				txt := &c.inpFields[i]
-				focused := c.focusedField == i
-				parts = append(parts, renderField(txt, c.dataFields[i], focused))
-				if txt.Err != nil {
-					valid = false
-				}
-				if focused {
-					cursorPart = ri
-				}
+	usedHeight := 0
+	for i, row := range m.layout[:len(m.layout)-1] {
+		for _, ld := range row {
+			f := m.fields[ld.fieldID]
+			d, c := f.View()
+			if c != nil {
+				c.X += ld.x
+				c.Y += usedHeight
+				cur = c
 			}
 
-			res, offsets := utils.JoinHorizontalEqualSpread(c.width, parts...)
-			if cursorPart != -1 {
-				cur.X += offsets[cursorPart]
-			}
-
-			sections = append(sections, res)
+			l := lipgloss.NewLayer(d)
+			l.Y(usedHeight)
+			l.X(ld.x)
+			l.Z(len(m.layout) - i)
+			compose.AddLayers(l)
 		}
+
+		usedHeight += m.rowHeights[i]
 	}
 
-	btnText := []string{"Save", "Reset"}
-	btnIDs := []int{BTN_SAVE, BTN_RESET}
-	if c.ItemID != "" {
-		btnText[0] = "Update"
-		btnText[1] = "Delete"
-		btnText = append(btnText, "Reset")
-		btnIDs[1] = BTN_DEL
-		btnIDs = append(btnIDs, BTN_RESET)
+	compose.AddLayers(m.buttonLayer(usedHeight))
+
+	if m.confirmDial != nil {
+		w := m.width - 4
+		s := lipgloss.NewStyle().Border(lipgloss.BlockBorder()).Width(w).Align(lipgloss.Center)
+
+		btnRow, _ := utils.JoinHorizontalEqualSpread(
+			w-4,
+			m.renderButton("Yes!", m.confirmDial.atYes, true, false),
+			m.renderButton("No :(", !m.confirmDial.atYes, false, false),
+		)
+		log.Println(ansi.Strip(btnRow))
+		c := s.Render(
+			"\n",
+			m.confirmDial.text,
+			"\n",
+			btnRow,
+			"\n",
+		)
+
+		l := lipgloss.NewLayer(c)
+		l.X(2)
+		l.Y((int(float64(m.height)*0.7) - lipgloss.Height(c)) / 2)
+		l.Z(900)
+
+		compose.AddLayers(l)
 	}
 
-	selectedBtn := -1
-	for i, id := range btnIDs {
-		if id == c.focusedField {
-			selectedBtn = i
-			break
-		}
-	}
-
-	sections = append(
-		sections,
-		scaleButtons(c.width, valid, selectedBtn, btnText),
-	)
-
-	return strings.Join(sections, "\n\n"), cur
-}
-
-func scaleButtons(w int, valid bool, selectedBtn int, btnText []string) string {
-	if t := renderButtons(w, valid, selectedBtn, false, btnText); t != "" {
-		return t
-	}
-
-	return renderButtons(w, valid, selectedBtn, true, btnText)
-}
-
-func renderButtons(w int, valid bool, selectedBtn int, small bool, btnText []string) string {
-	btns := make([]string, len(btnText))
-	for i, t := range btnText {
-		btns[i] = styles.StyleBtn(
-			!valid && i == 0,
-			i == selectedBtn,
-			i != 0,
-			small,
-		).Render(t)
-	}
-
-	out, _ := utils.JoinHorizontalEqualSpread(w, btns...)
-	return out
-}
-
-func renderRowField(w int, txt *textinput.Model, data *DataField, selected bool) (string, int) {
-	fieldStyle := styles.STYLE_FIELD
-	if selected {
-		fieldStyle = fieldStyle.BorderForeground(styles.COLOR_MAIN)
-	}
-
-	err := renderErr(txt)
-	if data.StyleCB != nil {
-		fieldStyle = data.StyleCB(txt.Value(), txt.Err, selected, fieldStyle)
-	}
-	field := fieldStyle.Render(renderTextField(txt))
-
-	res, offsets := utils.JoinHorizontalWithSpacer(
-		w, 1,
-		data.Title,
-		utils.Overflow(
-			err,
-			w-lipgloss.Width(data.Title)-lipgloss.Width(field)-2,
-		)+" ",
-		field,
-	)
-	return res, offsets[len(offsets) - 1]
-}
-
-func renderErr(txt *textinput.Model) string {
-	if txt.Err == nil {
-		return ""
-	}
-	if txt.Value() == "" && !errors.Is(txt.Err, ErrRequired{}) {
-		return ""
-	}
-
-	return lipgloss.NewStyle().Foreground(styles.COLOR_WRONG).Faint(true).Italic(true).Bold(
-		errors.Is(txt.Err, APIErr("")),
-	).Render(txt.Err.Error())
-}
-
-func renderField(txt *textinput.Model, data *DataField, selected bool) string {
-	fieldStyle := styles.STYLE_FIELD
-	if selected {
-		fieldStyle = fieldStyle.BorderForeground(styles.COLOR_MAIN)
-	}
-	if data.StyleCB != nil {
-		fieldStyle = data.StyleCB(txt.Value(), txt.Err, selected, fieldStyle)
-	}
-
-	err := renderErr(txt)
-	if err != "" {
-		fieldStyle = fieldStyle.BorderBottom(false)
-	}
-	if txt.Value() != "" {
-		fieldStyle = fieldStyle.BorderTop(false)
-	}
-
-	out := fieldStyle.Render(renderTextField(txt))
-	if err != "" {
-		out += "\n" + fakeBorder(false, fieldStyle, renderErr(txt), lipgloss.Width(out))
-	}
-	if txt.Value() == "" {
-		return out
-	}
-
-	titleStyle := lipgloss.NewStyle().Faint(true)
-	if selected {
-		titleStyle = titleStyle.Foreground(styles.COLOR_MAIN)
-	}
-
-	return fakeBorder(true, fieldStyle, titleStyle.Render(data.Title), lipgloss.Width(out)) + "\n" + out
-}
-
-func renderTextField(txt *textinput.Model) string {
-	// Fuck your text field and it's horse
-	return lipgloss.NewStyle().Width(txt.Width() + 1).MaxWidth(txt.Width() + 1).Inline(true).Render(txt.View())
-}
-
-func extraFieldLength(txt *textinput.Model, data *DataField) int {
-	fieldStyle := styles.STYLE_FIELD
-	if data.StyleCB != nil {
-		fieldStyle = data.StyleCB(txt.Value(), txt.Err, false, fieldStyle)
-	}
-
-	return lipgloss.Width(fieldStyle.Render(""))
-}
-
-func fakeBorder(top bool, style lipgloss.Style, str string, totalWidth int) string {
-	var (
-		horz        string
-		leftCorner  string
-		rightCorner string
-	)
-
-	bo := style.GetBorderStyle()
-	if top {
-		horz = bo.Top
-		leftCorner = bo.TopLeft
-		rightCorner = bo.TopRight
-	} else {
-		horz = bo.Bottom
-		leftCorner = bo.BottomLeft
-		rightCorner = bo.BottomRight
-	}
-
-	newStyle := lipgloss.NewStyle().Foreground(style.GetBorderLeftForeground())
-
-	return newStyle.Render(leftCorner+horz) + " " +
-		lipgloss.NewStyle().Width(totalWidth-6).Render(utils.Overflow(str, totalWidth-6)) +
-		" " + newStyle.Render(horz+rightCorner)
+	return lipgloss.NewCanvas(m.width, m.height).Compose(compose).Render(), cur
 }

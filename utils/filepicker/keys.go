@@ -20,8 +20,6 @@ func (m *Model) handleKeyCommon(key tea.KeyPressMsg) (tea.Cmd, bool) {
 		}
 		cmd := m.forceUserSel(np)
 		return cmd, true
-	case "shift+up", "shift+down", "shift+tab":
-		return m.toggleInput(), true
 	}
 
 	return nil, false
@@ -46,8 +44,6 @@ func (m *Model) handleKeyTextinput(key tea.KeyPressMsg) (tea.Cmd, bool) {
 
 			return m.forceUserSel(m.acceptedPath + "/" + sugs[m.sugIndex]), true
 		}
-
-		return m.toggleInput(), true
 	}
 
 	return nil, false
@@ -66,7 +62,7 @@ func (m *Model) handleKeyPicker(key tea.KeyPressMsg) (tea.Cmd, bool) {
 		}
 		return nil, true
 	case "tab", "shift+tab":
-		return m.toggleInput(), true
+		return m.ToggleInput(), true
 	case "enter":
 		dirs, files := m.visibleEntries(m.dirs), m.visibleEntries(m.files)
 		if m.fileIndex == -1 {
