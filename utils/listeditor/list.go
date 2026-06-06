@@ -6,7 +6,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/bank_data_tui/styles"
+	"github.com/bank-data-db/tui/styles"
 )
 
 type itemProxy[T Item] struct {
@@ -29,6 +29,7 @@ func (m *Model[T]) categoryItems() []list.Item {
 }
 
 type CreateNewItemKey string
+
 func (ni CreateNewItemKey) FilterValue() string { return string(ni) }
 
 type itemDel[T Item] func(baseStyle lipgloss.Style, selected bool, item T) string

@@ -9,11 +9,11 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/bank-data-db/proto/mappings_pb"
-	"github.com/bank_data_tui/api"
-	"github.com/bank_data_tui/styles"
-	"github.com/bank_data_tui/utils/dropdown"
-	"github.com/bank_data_tui/utils/editor"
-	"github.com/bank_data_tui/utils/toast"
+	"github.com/bank-data-db/tui/api"
+	"github.com/bank-data-db/tui/styles"
+	"github.com/bank-data-db/tui/utils/dropdown"
+	"github.com/bank-data-db/tui/utils/editor"
+	"github.com/bank-data-db/tui/utils/toast"
 	"golang.org/x/exp/constraints"
 )
 

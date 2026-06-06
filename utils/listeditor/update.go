@@ -5,8 +5,8 @@ import (
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
-	"github.com/bank_data_tui/utils"
-	"github.com/bank_data_tui/utils/editor"
+	"github.com/bank-data-db/tui/utils"
+	"github.com/bank-data-db/tui/utils/editor"
 )
 
 type ItemNew struct{ Value any }
@@ -54,7 +54,7 @@ func (m *Model[T]) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 		m.w, m.h = msg.W, msg.H
 
 		m.list.SetHeight(msg.H)
-		m.editor.Resize(msg.W - WIDTH_OFFSET_EDITOR, msg.H)
+		m.editor.Resize(msg.W-WIDTH_OFFSET_EDITOR, msg.H)
 	case tea.MouseWheelMsg:
 		bubble = false
 
@@ -109,5 +109,5 @@ func (m *Model[T]) isNewCategory(gi int) bool {
 }
 
 func (m *Model[T]) resetEditor() {
-	m.editor = m.del.NewEditor(m.w - WIDTH_OFFSET_EDITOR, m.h, m.curItem)
+	m.editor = m.del.NewEditor(m.w-WIDTH_OFFSET_EDITOR, m.h, m.curItem)
 }

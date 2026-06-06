@@ -4,7 +4,7 @@ import (
 	"log"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/bank_data_tui/utils/dropdown"
+	"github.com/bank-data-db/tui/utils/dropdown"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -65,7 +65,7 @@ func (i *FieldDropdown) SetFromMsg(m protoreflect.Message) {
 		i.SetValue("")
 		return
 	}
-	
+
 	v := m.Get(i.desc)
 	if i.desc.Kind() == protoreflect.EnumKind {
 		i.SetValue(

@@ -7,9 +7,9 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/bank-data-db/proto/cards_pb"
 	"github.com/bank-data-db/proto/categories_pb"
-	"github.com/bank_data_tui/api"
-	"github.com/bank_data_tui/utils"
-	"github.com/bank_data_tui/utils/dropdown"
+	"github.com/bank-data-db/tui/api"
+	"github.com/bank-data-db/tui/utils"
+	"github.com/bank-data-db/tui/utils/dropdown"
 )
 
 func NewCache() *Cache {
@@ -30,7 +30,7 @@ func NewCache() *Cache {
 					),
 					Value:       c.GetID(),
 					DisplayText: c.GetName(),
-					SearchText: "[" + c.GetIcon() + "] " + c.GetName(),
+					SearchText:  "[" + c.GetIcon() + "] " + c.GetName(),
 				}
 			},
 		},

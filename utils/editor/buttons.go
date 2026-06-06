@@ -1,6 +1,6 @@
 package editor
 
-import "github.com/bank_data_tui/utils"
+import "github.com/bank-data-db/tui/utils"
 
 const (
 	BTN_SAVE_ID         = -1

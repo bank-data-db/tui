@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/bank_data_tui/utils"
+	"github.com/bank-data-db/tui/utils"
 	"google.golang.org/protobuf/protoadapt"
 )
 

@@ -8,7 +8,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/bank_data_tui/utils/editor"
+	"github.com/bank-data-db/tui/utils/editor"
 )
 
 const (

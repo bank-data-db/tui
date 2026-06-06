@@ -5,8 +5,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/bank_data_tui/styles"
-	"github.com/bank_data_tui/utils"
+	"github.com/bank-data-db/tui/styles"
+	"github.com/bank-data-db/tui/utils"
 	"github.com/charmbracelet/x/ansi"
 )
 

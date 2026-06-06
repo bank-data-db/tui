@@ -8,9 +8,9 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/bank-data-db/proto/bank_svc_pb"
 	"github.com/bank-data-db/proto/categories_pb"
-	"github.com/bank_data_tui/api"
-	"github.com/bank_data_tui/utils/editor"
-	"github.com/bank_data_tui/utils/toast"
+	"github.com/bank-data-db/tui/api"
+	"github.com/bank-data-db/tui/utils/editor"
+	"github.com/bank-data-db/tui/utils/toast"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
 )

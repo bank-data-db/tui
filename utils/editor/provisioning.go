@@ -5,8 +5,8 @@ import (
 	"log"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/bank_data_tui/api"
-	"github.com/bank_data_tui/utils/toast"
+	"github.com/bank-data-db/tui/api"
+	"github.com/bank-data-db/tui/utils/toast"
 )
 
 func (m *Model) save(alt bool) tea.Msg {

@@ -7,9 +7,9 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/bank_data_tui/api"
-	"github.com/bank_data_tui/styles"
-	"github.com/bank_data_tui/utils"
+	"github.com/bank-data-db/tui/api"
+	"github.com/bank-data-db/tui/styles"
+	"github.com/bank-data-db/tui/utils"
 )
 
 var (

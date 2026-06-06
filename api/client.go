@@ -8,7 +8,7 @@ import (
 	"github.com/bank-data-db/proto/bank_svc_pb"
 	"github.com/bank-data-db/proto/errors_pb"
 	"github.com/bank-data-db/proto/user_svc_pb"
-	"github.com/bank_data_tui/utils"
+	"github.com/bank-data-db/tui/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"

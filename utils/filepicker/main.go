@@ -9,7 +9,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/bank_data_tui/styles"
+	"github.com/bank-data-db/tui/styles"
 )
 
 type Model struct {

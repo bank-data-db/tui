@@ -5,7 +5,7 @@ import (
 	"log"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/bank_data_tui/api"
+	"github.com/bank-data-db/tui/api"
 )
 
 func (c Model) Update(msg tea.Msg) (Model, tea.Cmd) {

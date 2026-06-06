@@ -6,14 +6,14 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/bank_data_tui/screens/cards"
-	"github.com/bank_data_tui/screens/categories"
-	"github.com/bank_data_tui/screens/login"
-	"github.com/bank_data_tui/screens/mappings"
-	"github.com/bank_data_tui/screens/transactions"
-	"github.com/bank_data_tui/screens/upload"
-	"github.com/bank_data_tui/utils"
-	"github.com/bank_data_tui/utils/toast"
+	"github.com/bank-data-db/tui/screens/cards"
+	"github.com/bank-data-db/tui/screens/categories"
+	"github.com/bank-data-db/tui/screens/login"
+	"github.com/bank-data-db/tui/screens/mappings"
+	"github.com/bank-data-db/tui/screens/transactions"
+	"github.com/bank-data-db/tui/screens/upload"
+	"github.com/bank-data-db/tui/utils"
+	"github.com/bank-data-db/tui/utils/toast"
 )
 
 func (m *mainApp) switchToScreen(s utils.ScreenID) tea.Cmd {

@@ -5,9 +5,9 @@ import (
 
 	"github.com/bank-data-db/proto/bank_svc_pb"
 	"github.com/bank-data-db/proto/cards_pb"
-	"github.com/bank_data_tui/api"
-	"github.com/bank_data_tui/utils/editor"
-	"github.com/bank_data_tui/utils/toast"
+	"github.com/bank-data-db/tui/api"
+	"github.com/bank-data-db/tui/utils/editor"
+	"github.com/bank-data-db/tui/utils/toast"
 )
 
 func create(c *api.Client, v *cards_pb.Card) func() (string, error) {

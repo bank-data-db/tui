@@ -7,9 +7,9 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/bank-data-db/proto/transactions_pb"
-	"github.com/bank_data_tui/styles"
-	"github.com/bank_data_tui/utils/dropdown"
-	"github.com/bank_data_tui/utils/toast"
+	"github.com/bank-data-db/tui/styles"
+	"github.com/bank-data-db/tui/utils/dropdown"
+	"github.com/bank-data-db/tui/utils/toast"
 )
 
 type editRow struct {

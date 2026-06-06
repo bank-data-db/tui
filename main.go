@@ -6,12 +6,12 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/bank_data_tui/api"
+	"github.com/bank-data-db/tui/api"
 
-	"github.com/bank_data_tui/screens/login"
-	"github.com/bank_data_tui/utils"
-	"github.com/bank_data_tui/utils/repo"
-	"github.com/bank_data_tui/utils/toast"
+	"github.com/bank-data-db/tui/screens/login"
+	"github.com/bank-data-db/tui/utils"
+	"github.com/bank-data-db/tui/utils/repo"
+	"github.com/bank-data-db/tui/utils/toast"
 	"github.com/joho/godotenv"
 )
 

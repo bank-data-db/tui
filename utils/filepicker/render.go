@@ -10,8 +10,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/bank_data_tui/styles"
-	"github.com/bank_data_tui/utils"
+	"github.com/bank-data-db/tui/styles"
+	"github.com/bank-data-db/tui/utils"
 )
 
 func (m Model) View() (string, *tea.Cursor) {
@@ -46,7 +46,7 @@ func (m Model) viewDirInput(sb *strings.Builder) {
 		if m.textField.Value() != "" && m.textField.Position() == lipgloss.Width(m.textField.Value()) {
 			text = text[:len(text)-1]
 		}
-	
+
 		if m.sugIndex != -1 {
 			_, f := path.Split(m.textField.Value())
 			sug := strings.TrimPrefix(m.suggestions()[m.sugIndex], f)
@@ -109,7 +109,7 @@ func (m Model) viewFiles(resp *strings.Builder, dirs []os.DirEntry) {
 			style = styleDis
 		}
 
-		if m.fileIndex == i + m.vpOffset {
+		if m.fileIndex == i+m.vpOffset {
 			if focused {
 				style = styleSel
 			}
