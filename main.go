@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 
@@ -34,13 +35,17 @@ func (m mainApp) Init() tea.Cmd {
 }
 
 func main() {
-	f, err := os.Create("logs/log.log")
-	if err != nil {
-		panic(err)
-	}
-	log.SetOutput(f)
-	defer f.Close()
 	godotenv.Load()
+	if os.Getenv("DEBUG_MODE") == "on" {
+		f, err := os.Create("logs/log.log")
+		if err != nil {
+			panic(err)
+		}
+		log.SetOutput(f)
+		defer f.Close()
+	} else {
+		log.SetOutput(io.Discard)
+	}
 
 	apiURL := os.Getenv("API_URL")
 	if apiURL == "" {
