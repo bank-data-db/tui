@@ -13,6 +13,7 @@ import (
 	"github.com/bank-data-db/tui/utils"
 	"github.com/bank-data-db/tui/utils/dropdown"
 	"github.com/bank-data-db/tui/utils/repo"
+	"github.com/bank-data-db/tui/utils/toast"
 )
 
 type Model struct {
@@ -103,6 +104,11 @@ func (m *Model) handleKeyNormal(msg tea.KeyPressMsg) tea.Cmd {
 		m.changeVP(k == "alt+up")
 	case "e":
 		cmd = m.newEditRow()
+	case "c":
+		cmd = tea.Sequence(
+			tea.SetClipboard(m.items[m.selected].GetDescription()),
+			toast.CmdSuccess("Copied"),
+		)
 	}
 
 	if !msg.Mod.Contains(tea.ModAlt) {

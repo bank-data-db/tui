@@ -1,6 +1,7 @@
 package toast
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/bank-data-db/tui/styles"
 	"github.com/bank-data-db/tui/utils"
@@ -35,5 +36,23 @@ func Error(msg string) {
 	utils.GlobalMessage <- ToastMsg{
 		Msg: msg,
 		Err: true,
+	}
+}
+
+func CmdSuccess(msg string) tea.Cmd {
+	return func() tea.Msg {
+		return ToastMsg{
+			Msg: msg,
+			Err: false,
+		}
+	}
+}
+
+func CmdError(msg string) tea.Cmd {
+	return func() tea.Msg {
+		return ToastMsg{
+			Msg: msg,
+			Err: true,
+		}
 	}
 }
