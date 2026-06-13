@@ -201,14 +201,7 @@ func RenderCategory(s lipgloss.Style, w int, color bool, c *categories_pb.Catego
 	return s.Render(res)
 }
 
-func RenderHeader(w int, color color.Color, text string) string {
-	c := lipgloss.NewStyle().Foreground(color)
-	w -= 6
-	t := Overflow(text, w)
-	return c.Render("╔╡ ") + t + c.Render(" ╞"+strings.Repeat("═", w-lipgloss.Width(t))+"╗")
-}
-
-func RenderFooter(w int, color color.Color, text string) string {
+func renderTextHeading(w int, l, r string, color color.Color, text string) string {
 	left, right := "", ""
 	if w >= 6 {
 		left, right = "╡", "╞"
@@ -219,7 +212,15 @@ func RenderFooter(w int, color color.Color, text string) string {
 
 	c := lipgloss.NewStyle().Foreground(color)
 	t := Overflow(text, w)
-	return "\n" + c.Render("╚"+left+" ") + t + c.Render(" "+right+strings.Repeat("═", w-lipgloss.Width(t))+"╝")
+	return c.Render(l+left+" ") + t + c.Render(" "+right+strings.Repeat("═", w-lipgloss.Width(t))+r)
+}
+
+func RenderHeader(w int, color color.Color, text string) string {
+	return renderTextHeading(w, "╔", "╗", color, text)
+}
+
+func RenderFooter(w int, color color.Color, text string) string {
+	return "\n" + renderTextHeading(w, "╚", "╝", color, text)
 }
 
 func RenderErrFooter(w int, color color.Color, err error) string {
