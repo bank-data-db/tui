@@ -212,5 +212,20 @@ func (m Model) View() (string, *tea.Cursor) {
 
 	comp.AddLayers(l)
 
+	if m.filterModal != nil {
+		lfm, lCur := m.viewFilterModal()
+		xOff := (m.w - lfm.Width()) / 2
+		yOff := (m.h - 8) / 2 - 5
+
+		lfm.Adjust(xOff, yOff, 999)
+
+		comp.AddLayers(lfm...)
+
+		lCur.Y += yOff
+		lCur.X += xOff
+
+		cur = lCur
+	}
+
 	return lipgloss.NewCanvas(m.w, m.h).Compose(comp).Render(), cur
 }

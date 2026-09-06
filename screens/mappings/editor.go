@@ -3,12 +3,11 @@ package mappings
 import (
 	"context"
 	"fmt"
-	"log"
-	"regexp"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/bank-data-db/proto/mappings_pb"
+	"github.com/bank-data-db/proto/utils"
 	"github.com/bank-data-db/tui/api"
 	"github.com/bank-data-db/tui/styles"
 	"github.com/bank-data-db/tui/utils/dropdown"
@@ -92,13 +91,10 @@ func update(c *api.Client, v *mappings_pb.Mapping) func() error {
 			}.Build())
 		}
 
-		log.Println("Map", v)
-		log.Println("ReqUp", req)
-
-		_, err := c.MappingsUpdate(context.Background(), req)
+		resp, err := c.MappingsUpdate(context.Background(), req)
 
 		if err == nil {
-			toast.Success("Mapping Updated")
+			runNumericToast("Mapping Updated! Now mapping %s transactions :3", resp.GetMappedTransactions())
 		}
 
 		return err
@@ -134,7 +130,7 @@ func (c *mappingDel) NewEditor(w, h int, v *mappings_pb.Mapping) editor.Model {
 			editor.LabelRow{editor.Label(fmtHeading("Matchers")), editor.Spacer()},
 			editor.Row{
 				editor.TextInput("Text", true, "match_text", false, editor.WithTextValidation(func(s string) *string {
-					_, err := regexp.CompilePOSIX(s)
+					_, err := utils.CompileRegex(s)
 					if err != nil {
 						return new("Invalid Regex")
 					}

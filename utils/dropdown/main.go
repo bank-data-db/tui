@@ -80,15 +80,22 @@ func (m *Model) Focus() tea.Cmd {
 	}
 	m.filteredValues = m.vals
 
-	if m.curSel != -1 {
-		if len(m.filteredValues) > m.MaxHeight-5 {
-			m.vOff = m.curSel
-		} else {
-			m.vOff = 0
-		}
-	}
+	m.forceCurSelIntoVP()
 
 	return m.inp.Focus()
+}
+
+func (m *Model) forceCurSelIntoVP() {
+	if m.curSel == -1 {
+		m.vOff = 0
+		return
+	}
+
+	if len(m.filteredValues) > m.MaxHeight-5 {
+		m.vOff = m.curSel
+	} else {
+		m.vOff = 0
+	}
 }
 
 func (m Model) Focused() bool {
@@ -294,6 +301,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.curSel == -1 && len(fv) != 0 {
 			m.curSel = 0
 		}
+
+		m.forceCurSelIntoVP()
 	}
 
 	return m, cmd

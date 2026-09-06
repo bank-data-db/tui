@@ -32,6 +32,15 @@ var HEADER_SCREENS = []struct {
 	{utils.S_UPLOAD, "Upload"},
 }
 
+var MIN_HEADER_WIDTH = 0
+
+func init() {
+	for _, v := range HEADER_SCREENS {
+		MIN_HEADER_WIDTH += len(v.t)
+	}
+	MIN_HEADER_WIDTH += len(HEADER_SCREENS) + 1
+}
+
 func (m mainApp) renderHeader() string {
 	r := []string{}
 	for _, h := range HEADER_SCREENS {
@@ -62,7 +71,7 @@ func (m mainApp) View() (v tea.View) {
 
 	if m.width == 0 || m.height == 0 {
 		return
-	} else if m.width < 50 || m.height < 20 {
+	} else if m.width < 50 || m.width < MIN_HEADER_WIDTH || m.height < 20 {
 		v.SetContent(m.renderTooSmall())
 		return
 	}

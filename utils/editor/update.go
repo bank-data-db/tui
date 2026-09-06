@@ -2,7 +2,6 @@ package editor
 
 import (
 	"errors"
-	"log"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/bank-data-db/tui/api"
@@ -17,7 +16,7 @@ func (c Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if c.width != 0 {
 		switch msg := msg.(type) {
 		case tea.KeyPressMsg:
-			if !c.inButtons(c.focusedField) {
+			if !c.inButtons(c.focusedField) && c.confirmDial == nil {
 				f := c.fields[c.focusedField]
 				inpF, ok := f.(inputField)
 				if ok {
@@ -34,13 +33,10 @@ func (c Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 
 			switch msg.String() {
-			case "tab", "shift+tab", "left", "right", "up", "down":
-				passToChildren = false
-
+			case "esc":
 				if c.confirmDial != nil {
-					c.confirmDial.atYes = !c.confirmDial.atYes
-				} else {
-					batcher = append(batcher, c.focusField(c.handleNavKey(msg.String())))
+					c.confirmDial = nil
+					passToChildren = false
 				}
 			case "enter", "alt+enter":
 				passToChildren = false
@@ -81,14 +77,22 @@ func (c Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 							}
 						}
 					default:
-						batcher = append(batcher, c.focusField(c.handleNavKey("enter")))
+						_, f := c.handleNavKey("enter")
+						batcher = append(batcher, c.focusField(f))
+					}
+				}
+			default:
+				handled, fID := c.handleNavKey(msg.String())
+				if handled {
+					passToChildren = false
+					if c.confirmDial == nil {
+						batcher = append(batcher, c.focusField(fID))
 					}
 				}
 			}
 		case validationErrMsg:
 			for _, v := range msg {
 				c.fieldByID[v[0]].SetErr(errors.New(v[1]))
-				log.Println("Set err on", v[0], v[1])
 			}
 		case forceReLayout, MsgItemNew:
 			c.ResetLayout()

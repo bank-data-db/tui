@@ -45,21 +45,19 @@ func (c Model) inButtons(i int) bool {
 	return i < 0
 }
 
-func (c Model) handleNavKey(key string) int {
+func (c Model) handleNavKey(key string) (bool, int) {
 	switch key {
-	case "tab", "right":
-		return c.navKeyHorizontal(1)
-	case "shift+tab", "left":
-		return c.navKeyHorizontal(-1)
-	case "enter":
-		return c.navKeyHorizontal(1)
-	case "down":
-		return c.navKeyVertical(1)
-	case "up":
-		return c.navKeyVertical(-1)
+	case "tab", "enter", "right", "shift+right":
+		return true, c.navKeyHorizontal(1)
+	case "shift+tab", "left", "shift+left":
+		return true, c.navKeyHorizontal(-1)
+	case "down", "shift+down":
+		return true, c.navKeyVertical(1)
+	case "up", "shift+up":
+		return true, c.navKeyVertical(-1)
 	}
 
-	panic("unknown nav key? " + key)
+	return false, -1
 }
 
 // x, y
@@ -76,6 +74,11 @@ func (c Model) rowCol(f int) (int, int) {
 }
 
 func (c Model) navKeyHorizontal(dir int) int {
+	if c.confirmDial != nil {
+		c.confirmDial.atYes = !c.confirmDial.atYes
+		return -1
+	}
+
 	cx, cy := c.rowCol(c.focusedField)
 
 	y := cy
@@ -132,6 +135,11 @@ func (c Model) fieldWidth(f int) int {
 }
 
 func (c Model) navKeyVertical(dir int) int {
+	if c.confirmDial != nil {
+		c.confirmDial.atYes = !c.confirmDial.atYes
+		return -1
+	}
+
 	cx, cy := c.rowCol(c.focusedField)
 
 	y := cy + dir

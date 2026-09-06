@@ -92,7 +92,7 @@ func (m *Model) updateDropdownHeight() {
 		return
 	}
 
-	m.editRow.cat.MaxHeight = m.h - (m.selected - m.viewportOff - 5)
+	m.editRow.cat.MaxHeight = m.h - (m.selected - m.viewportOff)
 }
 
 type transUpdated struct{}

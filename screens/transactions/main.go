@@ -13,7 +13,6 @@ import (
 	"github.com/bank-data-db/tui/utils"
 	"github.com/bank-data-db/tui/utils/dropdown"
 	"github.com/bank-data-db/tui/utils/repo"
-	"github.com/bank-data-db/tui/utils/toast"
 )
 
 type Model struct {
@@ -28,6 +27,8 @@ type Model struct {
 	nextPageLoading   bool
 	totalTransactions int
 	editRow           *editRow
+	filterModal       *filterModal
+	reqBuilder        transactions_pb.ReqList_builder
 }
 
 func New(api *api.Client, cache *repo.Cache, w, h int) *Model {
@@ -36,6 +37,11 @@ func New(api *api.Client, cache *repo.Cache, w, h int) *Model {
 		h:     h,
 		api:   api,
 		cache: cache,
+		reqBuilder: transactions_pb.ReqList_builder{
+			PageSize:   new(uint32(100)),
+			OrderBy:    transactions_pb.OrderFieldAuthedAt.Enum(),
+			Descending: new(true),
+		},
 	}
 }
 
@@ -84,40 +90,6 @@ func (m *Model) changeVP(goUp bool) {
 	}
 }
 
-func (m *Model) handleKeyNormal(msg tea.KeyPressMsg) tea.Cmd {
-	var cmd tea.Cmd
-
-	switch k := msg.String(); k {
-	case "down":
-		if m.selected != len(m.items)-1 {
-			m.selected++
-		}
-	case "up":
-		if m.selected != 0 {
-			m.selected--
-		}
-	case "end":
-		m.selected = len(m.items) - 1
-	case "start":
-		m.selected = 0
-	case "alt+down", "alt+up":
-		m.changeVP(k == "alt+up")
-	case "e":
-		cmd = m.newEditRow()
-	case "c":
-		cmd = tea.Sequence(
-			tea.SetClipboard(m.items[m.selected].GetDescription()),
-			toast.CmdSuccess("Copied"),
-		)
-	}
-
-	if !msg.Mod.Contains(tea.ModAlt) {
-		m.forceViewportIntoSel()
-	}
-
-	return cmd
-}
-
 func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 	var cmd tea.Cmd
 	batch := []tea.Cmd{}
@@ -126,16 +98,22 @@ func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		if m.editRow == nil {
-			cmd := m.handleKeyNormal(msg)
-			batch = append(batch, cmd)
-			passToChildren = false
-		} else {
+		if m.editRow != nil {
 			handled, cmd := m.handleKeyEditMode(msg)
 			batch = append(batch, cmd)
 			if handled {
 				passToChildren = false
 			}
+		} else if m.filterModal != nil {
+			handled, cmd := m.handleKeyModal(msg)
+			if handled {
+				passToChildren = false
+			}
+			batch = append(batch, cmd)
+		} else {
+			cmd := m.handleKeyNormal(msg)
+			batch = append(batch, cmd)
+			passToChildren = false
 		}
 	case newPageData:
 		if !msg.res.HasPaginationToken() {
@@ -162,6 +140,8 @@ func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 	case dropdown.SelectMsg:
 		if m.editRow != nil {
 			batch = append(batch, m.editRow.toggleFocus())
+		} else if m.filterModal != nil {
+			batch = append(batch, m.filterModal.toggleFocus())
 		}
 	case transUpdated:
 		t := m.items[m.selected]
@@ -188,15 +168,27 @@ func (m Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 		batch = append(batch, m.reqNextPage())
 	}
 
-	if passToChildren && m.editRow != nil {
-		if m.editRow.cat.Focused() {
-			cat, cmd := m.editRow.cat.Update(msg)
-			batch = append(batch, cmd)
-			m.editRow.cat = cat
-		} else {
-			name, cmd := m.editRow.name.Update(msg)
-			batch = append(batch, cmd)
-			m.editRow.name = name
+	if passToChildren {
+		if m.editRow != nil {
+			if m.editRow.cat.Focused() {
+				cat, cmd := m.editRow.cat.Update(msg)
+				batch = append(batch, cmd)
+				m.editRow.cat = cat
+			} else {
+				name, cmd := m.editRow.name.Update(msg)
+				batch = append(batch, cmd)
+				m.editRow.name = name
+			}
+		} else if m.filterModal != nil {
+			if m.filterModal.resolved.Focused() {
+				resolved, cmd := m.filterModal.resolved.Update(msg)
+				batch = append(batch, cmd)
+				m.filterModal.resolved = resolved
+			} else {
+				card, cmd := m.filterModal.cards.Update(msg)
+				batch = append(batch, cmd)
+				m.filterModal.cards = card
+			}
 		}
 	}
 
@@ -249,12 +241,10 @@ func (m *Model) reqNextPage() tea.Cmd {
 
 	return tea.Batch(
 		func() tea.Msg {
-			d, err := m.api.TransactionsList(context.Background(), transactions_pb.ReqList_builder{
-				PaginationToken: m.paginationToken,
-				OrderBy:         transactions_pb.OrderFieldAuthedAt.Enum(),
-				Descending:      new(true),
-				PageSize:        new(uint32(100)),
-			}.Build())
+			b := m.reqBuilder
+			b.PaginationToken = m.paginationToken
+
+			d, err := m.api.TransactionsList(context.Background(), b.Build())
 			if err != nil {
 				log.Panicln(err)
 			}

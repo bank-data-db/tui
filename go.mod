@@ -21,7 +21,7 @@ require (
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect
-	github.com/bank-data-db/proto v0.0.0-20260606224223-209fdc2a2e6f
+	github.com/bank-data-db/proto v0.0.0-20260614145146-ff2177b38e86
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260601155805-6cf7526a1b3f // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect

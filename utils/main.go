@@ -228,3 +228,45 @@ func RenderErrFooter(w int, color color.Color, err error) string {
 		w, color, styles.S_TEXT_ERR.Render(err.Error()),
 	)
 }
+
+func CursorLayer(c *tea.Cursor, l *lipgloss.Layer) *tea.Cursor {
+	if c == nil {
+		return nil
+	}
+
+	c.X += l.GetX()
+	c.Y += l.GetY()
+
+	return c
+}
+
+func Coalesce[T any, PT *T](vals ...PT) PT {
+	for _, v := range vals {
+		if v != nil {
+			return v
+		}
+	}
+
+	return nil
+}
+
+type LayerGroup []*lipgloss.Layer
+
+func (pl LayerGroup) Adjust(x, y, z int) {
+	for _, l := range pl {
+		l.X(l.GetX() + x)
+		l.Y(l.GetY() + y)
+		l.Z(l.GetZ() + z)
+	}
+}
+
+func (pl LayerGroup) Width() int {
+	w := 0
+	for _, l := range pl {
+		if tw := l.Width(); tw > w {
+			w = tw
+		}
+	}
+
+	return w
+}

@@ -3,6 +3,7 @@ package editor
 import (
 	"errors"
 	"log"
+	"reflect"
 	"strconv"
 
 	"charm.land/bubbles/v2/textinput"
@@ -85,8 +86,9 @@ type FieldTextInput struct {
 }
 
 func (t *FieldTextInput) Focus() tea.Cmd {
+	cmd := t.Model.Focus()
 	t.CursorEnd()
-	return t.Model.Focus()
+	return cmd
 }
 
 func (t *FieldTextInput) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
@@ -96,11 +98,8 @@ func (t *FieldTextInput) HandleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 
 	switch k := msg.String(); k {
 	case "left", "right":
-		pos := t.Position()
-		if handleHorizConflict(k == "right", pos, pos == lipgloss.Width(t.Value())) {
-			cmd := t.Update(msg)
-			return true, cmd
-		}
+		cmd := t.Update(msg)
+		return true, cmd
 	}
 
 	return false, nil
@@ -111,6 +110,7 @@ func (t *FieldTextInput) SetWidth(w int) {
 	if !t.rowMode {
 		// extra -1 for the bullshit "extra" space at the end
 		t.Model.SetWidth(w - 4 - 1)
+		t.CursorEnd()
 	}
 }
 
@@ -160,6 +160,10 @@ func (t FieldTextInput) viewInlineMode(style lipgloss.Style) (string, *tea.Curso
 
 	c := t.Cursor()
 	if c != nil {
+		// Uhhhh something something fuck you, bubbletea team
+		// (jk but im annoyed)
+		// https://github.com/charmbracelet/bubbles/issues/1001
+		c.X = t.Position() - int(reflect.ValueOf(&t.Model).Elem().FieldByName("offset").Int())
 		c.X += 2
 		c.Y += 1
 	}
@@ -191,6 +195,7 @@ func (t FieldTextInput) View() (string, *tea.Cursor) {
 func (t *FieldTextInput) Update(msg tea.Msg) tea.Cmd {
 	m, cmd := t.Model.Update(msg)
 	t.Model = m
+	log.Println("Meow", m.Position(), m.Value(), m.Width())
 
 	return cmd
 }
