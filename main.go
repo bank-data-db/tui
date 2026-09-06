@@ -63,7 +63,7 @@ func main() {
 		api:              api,
 		cache:            repo.NewCache(),
 	}
-	user, pass := os.Getenv("USERNAME"), os.Getenv("PASSWORD")
+	user, pass := os.Getenv("BANK_USER"), os.Getenv("BANK_PASSWORD")
 
 	if user != "" && pass != "" {
 		err := app.api.Login(user, pass)

@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/bank-data-db/proto/bank_svc_pb"
@@ -11,6 +14,7 @@ import (
 	"github.com/bank-data-db/tui/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -51,11 +55,53 @@ func (e *ValidationErr) Error() string {
 	return fields.String()
 }
 
+func newTransportCreds() credentials.TransportCredentials {
+	if os.Getenv("INSECURE") == "on" {
+		return insecure.NewCredentials()
+	}
+
+	skipVerify := os.Getenv("TLS_SKIP_VERIFY") == "on"
+
+	return credentials.NewTLS(&tls.Config{
+		RootCAs: newCertPool(),
+		InsecureSkipVerify: skipVerify,
+		ServerName: "bank-data.lucydryaeva.com",
+	})
+}
+
+func newCertPool() *x509.CertPool {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		log.Println("Can't load system pool :(", err)
+		pool = x509.NewCertPool()
+	}
+
+	path := os.Getenv("CUSTOM_CA_PATH")
+	if path == "" {
+		return pool
+	}
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		log.Println("Can't custom ca file", err)
+		return pool
+	}
+	ok := pool.AppendCertsFromPEM(b)
+	if ok {
+		log.Println("Added custom CA(s)")
+	} else {
+		log.Println("Couldn't add custom CA(a)")
+	}
+
+	return pool
+}
+
 func NewClient(trg string) (*Client, error) {
 	c := &Client{}
+
 	conn, err := grpc.NewClient(
 		trg,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(newTransportCreds()),
 		grpc.WithChainUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 			if c.jwt != "" {
 				ctx = metadata.AppendToOutgoingContext(ctx, "authorization", c.jwt)
