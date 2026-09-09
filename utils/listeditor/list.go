@@ -40,7 +40,8 @@ func (i itemDel[T]) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
 
 func (r itemDel[T]) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	style := lipgloss.NewStyle().Foreground(styles.COLOR_MAIN)
-	if m.Index() == index {
+	selected := m.Index() == index
+	if selected {
 		style = style.Underline(true).Foreground(styles.COLOR_SECONDARY)
 	}
 
@@ -51,6 +52,6 @@ func (r itemDel[T]) Render(w io.Writer, m list.Model, index int, item list.Item)
 		return
 	}
 
-	str := r(style, m.GlobalIndex() == index, item.(itemProxy[T]).v)
+	str := r(style, selected, item.(itemProxy[T]).v)
 	w.Write([]byte(str))
 }
