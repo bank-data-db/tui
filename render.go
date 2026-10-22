@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/bank-data-db/tui/styles"
 	"github.com/bank-data-db/tui/utils"
+	"github.com/bank-data-db/tui/utils/toast"
 )
 
 var (
@@ -102,7 +103,12 @@ func (m mainApp) View() (v tea.View) {
 			c.X += padLeft
 		}
 
-		v.SetContent(lipgloss.NewStyle().Padding(padTop, 0, 0, padLeft).Render(s))
+		v.SetContent(
+			lipgloss.NewCompositor(
+				lipgloss.NewLayer(lipgloss.NewStyle().Padding(padTop, 0, 0, padLeft).Render(s)),
+				renderToasts(m.width, m.toasts),
+			).Render(),
+		)
 		return
 	}
 
@@ -116,16 +122,22 @@ func (m mainApp) View() (v tea.View) {
 	}
 
 	content := lipgloss.NewLayer(header + "\n" + lipgloss.NewStyle().Padding(padTop, 0, 0, padLeft).Render(s))
-	toastData := ""
-	toastWidth := int(float64(m.width) * 0.2)
-	for _, v := range m.toasts[:min(len(m.toasts), 2)] {
-		toastData += v.View(toastWidth) + "\n"
-	}
-	toasts := lipgloss.NewLayer(strings.TrimRight(toastData, "\n"))
-	toasts.Z(20)
-	toasts.X(m.width - toastWidth)
 
-	v.SetContent(lipgloss.NewCompositor(content, toasts).Render())
+	v.SetContent(lipgloss.NewCompositor(content, renderToasts(m.width, m.toasts)).Render())
 
 	return v
+}
+
+func renderToasts(w int, toasts []*toast.ToastMsg) *lipgloss.Layer {
+	toastData := ""
+	toastWidth := int(float64(w) * 0.2)
+	for _, v := range toasts[:min(len(toasts), 2)] {
+		toastData += v.View(toastWidth) + "\n"
+	}
+
+	l := lipgloss.NewLayer(strings.TrimRight(toastData, "\n"))
+	l.Z(20)
+	l.X(w - toastWidth)
+
+	return l
 }

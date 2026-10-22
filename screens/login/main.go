@@ -10,6 +10,9 @@ import (
 	"github.com/bank-data-db/tui/api"
 	"github.com/bank-data-db/tui/styles"
 	"github.com/bank-data-db/tui/utils"
+	"github.com/bank-data-db/tui/utils/toast"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -184,7 +187,9 @@ func (s *Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 					return s, func() tea.Msg {
 						err := s.api.Login(s.inpName.Value(), s.inpPass.Value())
 						if err != nil {
-							return msgWrongPass{}
+							return msgBadLogin{
+								err: err,
+							}
 						} else {
 							return utils.MsgSwitchScreens(utils.S_TRANS)
 						}
@@ -196,15 +201,25 @@ func (s *Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 		}
 	case clearWrongPass:
 		s.state = 0
-	case msgWrongPass:
+	case msgBadLogin:
 		s.state = 2
-		s.inpName.SetValue("")
-		s.inpPass.SetValue("")
-		s.changeField(0)
+		errMsg := msg.err.Error()
+		if gs, ok := status.FromError(msg.err); ok {
+			if gs.Code() == codes.Unauthenticated {
+				s.inpName.SetValue("")
+				s.inpPass.SetValue("")
+				s.changeField(0)
+				errMsg = ""
+			}
+		}
+
 		batcher = append(batcher, func() tea.Msg {
 			<-time.NewTimer(750 * time.Millisecond).C
 			return clearWrongPass(true)
 		})
+		if errMsg != "" {
+			batcher = append(batcher, toast.CmdError(errMsg))
+		}
 	}
 
 	var tmpCmd tea.Cmd
@@ -219,4 +234,6 @@ func (s *Model) Update(msg tea.Msg) (utils.Screen, tea.Cmd) {
 }
 
 type clearWrongPass bool
-type msgWrongPass struct{}
+type msgBadLogin struct {
+	err error
+}
